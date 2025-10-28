@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>API Endpoints Dashboard</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        background: #f8f8f8;
+        padding: 20px;
+      }
+      h1 {
+        color: #333;
+      }
+      .search-box {
+        margin-bottom: 20px;
+      }
+      input[type="text"] {
+        width: 100%;
+        padding: 8px;
+        font-size: 14px;
+        border-radius: 10px;
+      }
+
+      .group {
+        margin-bottom: 20px;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        background: white;
+        overflow: hidden;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .group-header {
+        padding: 12px;
+        font-weight: bold;
+        background: #333;
+        color: #fff;
+        cursor: pointer;
+        border-radius: 8px 8px 0 0;
+      }
+      .group-body.active {
+        padding: 15px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .group-body {
+        display: none;
+      }
+
+      .endpoint-card {
+        background: #fafafa;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 12px;
+        display: flex;
+        gap: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        align-items: center;
+        justify-items: baseline;
+      }
+      .methods {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        align-items: start;
+        justify-items: center;
+        min-width: 150px;
+        cursor: default;
+      }
+      .method {
+        font-weight: bold;
+        font-size: 13px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        color: white;
+        display: inline-block;
+        width: fit-content;
+      }
+      .method.GET {
+        background: #3eaa57;
+      }
+      .method.POST {
+        background: #467bb5;
+      }
+      .method.PUT {
+        background: #e1c36b;
+        color: black;
+      }
+      .method.DELETE {
+        background: #c44955;
+      }
+      .path {
+        font-family: monospace;
+        font-size: 20px;
+        font-weight: bold;
+        color: #333;
+        word-break: break-all;
+        flex-grow: 1;
+      }
+      button.copy-btn {
+        padding: 4px 8px;
+        font-size: 14px;
+        cursor: pointer;
+        border: none;
+        border-radius: 4px;
+        background: #696969;
+        color: #fff;
+        align-self: flex-start;
+      }
+      button.copy-btn:hover {
+        background: #0056b3;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>API Dashboard 🚀</h1>
+
+    <div class="search-box">
+      <input type="text" id="search" placeholder="Tìm endpoint..." />
+    </div>
+
+    <% Object.keys(grouped).forEach(prefix => { %>
+    <div class="group">
+      <div class="group-header"><%= prefix %></div>
+      <div class="group-body active">
+        <% grouped[prefix].forEach(ep => { %>
+        <div class="endpoint-card">
+          <div class="methods">
+            <% ep.methods.forEach(m => { %>
+            <span class="method <%= m %>"><%= m %></span>
+            <% }) %>
+          </div>
+          <div class="path"><%= ep.path %></div>
+          <button
+            class="copy-btn"
+            data-method="<%= ep.methods[0] %>"
+            data-path="<%= ep.path %>"
+          >
+            Copy
+          </button>
+        </div>
+        <% }) %>
+      </div>
+    </div>
+    <% }) %>
+
+    <script>
+      // Accordion toggle
+      document.querySelectorAll(".group-header").forEach((header) => {
+        header.addEventListener("click", () => {
+          const body = header.nextElementSibling;
+          body.classList.toggle("active");
+        });
+      });
+
+      // Search filter
+      const searchInput = document.getElementById("search");
+      searchInput.addEventListener("input", () => {
+        const keyword = searchInput.value.toLowerCase();
+        document.querySelectorAll(".group").forEach((group) => {
+          const cards = group.querySelectorAll(".endpoint-card");
+          let matchGroup = false;
+
+          cards.forEach((card) => {
+            const text = card.innerText.toLowerCase();
+            if (text.includes(keyword)) {
+              card.style.display = "flex";
+              matchGroup = true;
+            } else {
+              card.style.display = "none";
+            }
+          });
+
+          group.style.display = matchGroup || keyword === "" ? "" : "none";
+        });
+      });
+
+      // Copy button
+      document.querySelectorAll(".copy-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const method = btn.dataset.method;
+          const path = btn.dataset.path;
+          const fullUrl = `${method} http://localhost:8484${path}`;
+          try {
+            await navigator.clipboard.writeText(fullUrl);
+            btn.innerText = "Copied!";
+            setTimeout(() => (btn.innerText = "Copy"), 1500);
+          } catch (err) {
+            console.error("Copy failed", err);
+          }
+        });
+      });
+    </script>
+  </body>
+</html>
