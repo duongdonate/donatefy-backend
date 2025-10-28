@@ -13,7 +13,7 @@ const listEndpoints = require("express-list-endpoints");
 app.use(express.json());
 app.use(
   cors({
-    origin: "http://localhost:3000", // Đổi thành port của frontend React
+    origin: process.env.FRONTEND_URL, // Đổi thành port của frontend React
     credentials: true,
     methods: ["GET", "POST", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
