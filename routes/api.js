@@ -243,10 +243,10 @@ router.get("/playlists", async (req, res) => {
 
 router.post("/playlist/:id/add-song", async (req, res) => {
   const { id } = req.params;
-  const { videoIds } = req.body;
+  const { videoId } = req.body;
 
-  if (!videoIds) {
-    return res.status(400).json({ error: "videoIds là bắt buộc" });
+  if (!videoId) {
+    return res.status(400).json({ error: "videoId là bắt buộc" });
   }
 
   try {
@@ -254,7 +254,7 @@ router.post("/playlist/:id/add-song", async (req, res) => {
     if (!playlist) {
       return res.status(404).json({ error: "Không tìm thấy playlist" });
     }
-    if (!playlist.videos.includes(videoIds)) {
+    if (!playlist.videos.includes(videoId)) {
       playlist.videos.push(videoId);
       await playlist.save();
       console.log(`Đã thêm bài hát ${videoId} vào playlist ${id}`); // Log thêm thành công
