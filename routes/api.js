@@ -4,6 +4,8 @@ const NodeCache = require("node-cache");
 const axiosRetry = require("axios-retry").default;
 const SearchHistory = require("../models/SearchHistory");
 const CustomPlaylist = require("../models/CustomPlaylist");
+const apiYoutubeService = require("../services/apiYoutubeService");
+const songService = require("../services/songService");
 const CustomSong = require("../models/CustomSong");
 const getRandomPlaylistCover = require("../utils/randomPlaylistCover");
 const parseToSeconds = require("../utils/parseToSeconds");
@@ -243,10 +245,32 @@ router.get("/playlists", async (req, res) => {
 
 router.post("/playlist/:id/add-song", async (req, res) => {
   const { id } = req.params;
-  const { videoId } = req.body;
+  const { videoIds } = req.body;
 
-  if (!videoId) {
-    return res.status(400).json({ error: "videoId là bắt buộc" });
+  if (!videoIds || !Array.isArray(videoIds)) {
+    return res.status(400).json({ error: "videoIds là bắt buộc" });
+  }
+
+  try {
+    // Gọi YouTube Data API để lấy thông tin video
+    const data = await apiYoutubeService.fetchYouTubeVideos(videoIds);
+
+    // Chuyển đổi dữ liệu API thành định dạng phù hợp với CustomSong
+    const videos = data.items.map((item) => ({
+      id: item.id,
+      name: item.snippet.title,
+      artist: item.snippet.channelTitle,
+      thumbnail: item.snippet.thumbnails.high.url,
+      createdAt: item.snippet.publishedAt,
+      duration: parseToSeconds(item.contentDetails.duration),
+    }));
+
+    videos.forEach((video) => {
+      songService.createSong(video);
+    });
+  } catch (error) {
+    console.error("Error fetching video details:", error);
+    Res.error(res, "Lỗi khi tạo bài hát từ URL", 500, error.message);
   }
 
   try {
@@ -254,10 +278,12 @@ router.post("/playlist/:id/add-song", async (req, res) => {
     if (!playlist) {
       return res.status(404).json({ error: "Không tìm thấy playlist" });
     }
-    if (!playlist.videos.includes(videoId)) {
-      playlist.videos.push(videoId);
-      await playlist.save();
-      console.log(`Đã thêm bài hát ${videoId} vào playlist ${id}`); // Log thêm thành công
+    for (const videoId of videoIds) {
+      if (!playlist.videos.includes(videoId)) {
+        playlist.videos.push(videoId);
+        await playlist.save();
+        console.log(`Đã thêm bài hát ${videoId} vào playlist ${id}`); // Log thêm thành công
+      }
     }
     res.json(playlist);
   } catch (error) {
