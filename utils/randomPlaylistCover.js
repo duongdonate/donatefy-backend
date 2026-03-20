@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 function getRandomPlaylistCover() {
+  const baseURL = process.env.BASE_URL || "http://localhost:8404"; // Lấy URL từ biến môi trường
   const imagesDir = path.join(__dirname, "../public/img");
   const images = fs
     .readdirSync(imagesDir)
@@ -12,7 +13,7 @@ function getRandomPlaylistCover() {
   }
 
   const randomImage = images[Math.floor(Math.random() * images.length)];
-  return `http://localhost:8404/img/${randomImage}`;
+  return `${baseURL}/img/${randomImage}`;
 }
 
 module.exports = getRandomPlaylistCover;
