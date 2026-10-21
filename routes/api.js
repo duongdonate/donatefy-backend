@@ -225,13 +225,16 @@ router.post("/playlists", async (req, res) => {
   }
 });
 
+// Link chia sẻ trỏ về trang /playlist/:id của frontend (lấy địa chỉ đầu tiên nếu FRONTEND_URL là danh sách)
+const FRONTEND = (process.env.FRONTEND_URL || "http://localhost:5173").split(",")[0].trim().replace(/\/$/, "");
+
 // Lấy tất cả playlists
 router.get("/playlists", async (req, res) => {
   try {
     const playlists = await CustomPlaylist.find().sort({ createdAt: -1 });
     const playlistsWithShareUrl = playlists.map((playlist) => ({
       ...playlist._doc,
-      shareUrl: `http://localhost:8404/playlist/${playlist._id}`, // Sửa thành cổng 8404
+      shareUrl: `${FRONTEND}/playlist/${playlist._id}`,
       cover: getRandomPlaylistCover(),
     }));
     Res.success(res, playlistsWithShareUrl, "Lấy playlists thành công");

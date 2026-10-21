@@ -1,0 +1,984 @@
+openapi: 3.0.3
+
+info:
+  title: Donatefy API
+  version: 1.1.0
+  description: |
+    Backend của Donatefy: tìm và lấy thông tin video YouTube, lưu bài hát,
+    quản lý playlist, lịch sử tìm kiếm, đăng ký/đăng nhập và avatar.
+
+    **Kiểu phản hồi.** API đang dùng hai kiểu:
+    - Một số route trả thẳng dữ liệu (object/mảng) hoặc `{ error, details }` khi lỗi.
+    - Các route dùng helper `Res` trả về dạng bọc `{ status, message, data }`
+      (thành công) hoặc `{ status: "error", message, error }` (lỗi).
+      Các route này được đánh dấu bằng schema `*Envelope`.
+
+    **Xác thực.** Chỉ `GET /api/auth/me` yêu cầu JWT (header `Authorization: Bearer <token>`).
+    Token có hạn 1 giờ. Các route còn lại hiện không kiểm tra đăng nhập.
+
+security: []
+
+servers:
+  - url: /
+    description: Cùng host với trang tài liệu này
+  - url: http://localhost:8404
+    description: Chạy ở máy (mặc định)
+
+tags:
+  - name: Auth
+    description: Đăng ký, đăng nhập, thông tin người dùng
+  - name: YouTube
+    description: Tìm kiếm, thông tin video và gợi ý (cần YOUTUBE_API_KEY trên server)
+  - name: Songs
+    description: Bài hát đã lưu (CustomSong)
+  - name: Playlists
+    description: Playlist tự tạo (CustomPlaylist)
+  - name: History
+    description: Lịch sử tìm kiếm
+  - name: Avatars
+    description: Upload và lấy ảnh đại diện
+
+paths:
+  # ===================== Auth =====================
+  /api/auth/register:
+    post:
+      operationId: register
+      tags: [Auth]
+      summary: Đăng ký tài khoản
+      description: |
+        Tạo user mới và trả về JWT. Nếu `avatar` là `true`, server tạo sẵn một bản ghi Avatar
+        rỗng; sau đó gọi `POST /upload/avatars` để tải ảnh lên.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterInput"
+      responses:
+        "201":
+          description: Đăng ký thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Đăng ký thành công
+                  access_token:
+                    type: string
+                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        "400":
+          description: Username đã tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+              example:
+                message: Username đã tồn tại
+        "500":
+          $ref: "#/components/responses/ServerMessage"
+
+  /api/auth/login:
+    post:
+      operationId: login
+      tags: [Auth]
+      summary: Đăng nhập
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Đăng nhập thành công, trả về JWT (hạn 1 giờ)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        "401":
+          description: Sai tài khoản hoặc mật khẩu
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+              example:
+                message: Tên tài khoản hoặc mật khẩu không chính xác
+        "500":
+          $ref: "#/components/responses/ServerMessage"
+
+  /api/auth/me:
+    get:
+      operationId: getMe
+      tags: [Auth]
+      summary: Lấy thông tin user hiện tại
+      description: Không trả về mật khẩu. `avatar` là URL ảnh nếu user đã upload, ngược lại là `null`/`false`.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Lấy thông tin thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: "#/components/schemas/User"
+        "401":
+          description: Thiếu token hoặc token không hợp lệ / hết hạn
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+              examples:
+                noToken:
+                  value: { message: "No token, not authorized" }
+                invalid:
+                  value: { message: "Unauthorized, token invalid" }
+        "404":
+          description: Không tìm thấy user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+              example:
+                message: User not found
+        "500":
+          $ref: "#/components/responses/ServerMessage"
+
+  # ===================== YouTube =====================
+  /api/search:
+    get:
+      operationId: searchVideos
+      tags: [YouTube]
+      summary: Tìm video trên YouTube
+      description: Trả tối đa 20 video. Kết quả được cache 10 phút theo từ khoá; header `X-Cache` cho biết `hit` hay `miss`.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Từ khoá, tối thiểu 2 ký tự
+          schema:
+            type: string
+            minLength: 2
+          example: lofi chill
+      responses:
+        "200":
+          description: Danh sách video
+          headers:
+            X-Cache:
+              schema:
+                type: string
+                enum: [hit, miss]
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SearchItem"
+                  fromCache:
+                    type: boolean
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/YouTubeError"
+
+  /api/video/{id}:
+    get:
+      operationId: getVideo
+      tags: [YouTube]
+      summary: Lấy thông tin một video
+      description: Cache 10 phút theo videoId.
+      parameters:
+        - $ref: "#/components/parameters/VideoIdPath"
+      responses:
+        "200":
+          description: Thông tin video
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoInfo"
+        "404":
+          description: Không tìm thấy video
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/YouTubeError"
+
+  /api/recommend:
+    get:
+      operationId: getRecommendations
+      tags: [YouTube]
+      summary: Gợi ý video cùng kênh
+      description: Lấy kênh của video đầu vào rồi tìm tối đa 10 video khác của kênh đó (bỏ video đầu vào).
+      parameters:
+        - name: videoId
+          in: query
+          required: true
+          description: ID video YouTube (đúng 11 ký tự)
+          schema:
+            type: string
+            minLength: 11
+            maxLength: 11
+          example: dQw4w9WgXcQ
+      responses:
+        "200":
+          description: Danh sách gợi ý
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VideoInfo"
+        "400":
+          description: Thiếu hoặc sai videoId
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: Invalid or missing videoId
+        "404":
+          description: Không tìm thấy video
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/YouTubeError"
+
+  # ===================== Songs =====================
+  /api/songs/info:
+    post:
+      operationId: createSongsFromVideoIds
+      tags: [Songs]
+      summary: Lưu bài hát từ danh sách videoId
+      description: Gọi YouTube lấy tiêu đề, kênh, ảnh, thời lượng rồi lưu thành CustomSong.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VideoIdsInput"
+      responses:
+        "200":
+          description: Danh sách bài hát vừa tạo
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/SongInput"
+              example:
+                status: success
+                message: Tạo bài hát từ URL thành công
+                data:
+                  - id: dQw4w9WgXcQ
+                    name: Never Gonna Give You Up
+                    artist: Rick Astley
+                    thumbnail: https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg
+                    createdAt: "2009-10-25T06:57:33Z"
+                    duration: 213
+        "400":
+          $ref: "#/components/responses/EnvelopeBadRequest"
+        "500":
+          $ref: "#/components/responses/EnvelopeError"
+
+  /api/songs:
+    get:
+      operationId: listSongs
+      tags: [Songs]
+      summary: Lấy danh sách bài hát
+      description: Không truyền `playlistId` thì trả tất cả bài hát; có `playlistId` thì chỉ trả các bài nằm trong playlist đó.
+      parameters:
+        - name: playlistId
+          in: query
+          required: false
+          schema:
+            type: string
+          example: 65f123abc123def456789012
+      responses:
+        "200":
+          description: Danh sách bài hát
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Song"
+        "500":
+          $ref: "#/components/responses/EnvelopeError"
+
+  /songs/{id}:
+    get:
+      operationId: getSong
+      tags: [Songs]
+      summary: Lấy một bài hát theo videoId
+      parameters:
+        - $ref: "#/components/parameters/VideoIdPath"
+      responses:
+        "200":
+          description: Bài hát
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Song"
+        "404":
+          description: Không tìm thấy bài hát
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  # ===================== Playlists =====================
+  /api/playlists:
+    get:
+      operationId: listPlaylists
+      tags: [Playlists]
+      summary: Lấy tất cả playlist
+      description: Mới nhất trước. Mỗi playlist có thêm `shareUrl` (trang playlist trên frontend) và `cover` (ảnh bìa ngẫu nhiên).
+      responses:
+        "200":
+          description: Danh sách playlist
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          allOf:
+                            - $ref: "#/components/schemas/Playlist"
+                            - type: object
+                              properties:
+                                shareUrl:
+                                  type: string
+                                  format: uri
+                                  example: https://donatefy.vercel.app/playlist/65f123abc123def456789012
+                                cover:
+                                  type: string
+                                  format: uri
+                                  example: http://localhost:8404/img/tanjiro.jpg
+        "500":
+          $ref: "#/components/responses/ServerError"
+    post:
+      operationId: createPlaylist
+      tags: [Playlists]
+      summary: Tạo playlist
+      description: Ảnh `thumbnail` được chọn ngẫu nhiên từ thư mục `public/img`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  example: Chill buổi tối
+                videos:
+                  type: array
+                  description: Danh sách videoId ban đầu (không bắt buộc)
+                  items:
+                    type: string
+                  example: [dQw4w9WgXcQ]
+      responses:
+        "201":
+          description: Playlist vừa tạo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Playlist"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/playlists/{id}:
+    delete:
+      operationId: deletePlaylist
+      tags: [Playlists]
+      summary: Xoá playlist
+      parameters:
+        - $ref: "#/components/parameters/PlaylistIdPath"
+      responses:
+        "200":
+          description: Đã xoá
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+              example:
+                message: Đã xóa playlist thành công
+        "404":
+          $ref: "#/components/responses/PlaylistNotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /playlists/{id}:
+    get:
+      operationId: getPlaylist
+      tags: [Playlists]
+      summary: Lấy một playlist
+      description: Kèm `cover` là ảnh bìa ngẫu nhiên (mỗi lần gọi có thể khác nhau).
+      parameters:
+        - $ref: "#/components/parameters/PlaylistIdPath"
+      responses:
+        "200":
+          description: Playlist
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Playlist"
+                  - type: object
+                    properties:
+                      cover:
+                        type: string
+                        format: uri
+        "404":
+          $ref: "#/components/responses/PlaylistNotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/playlist/{id}/add-song:
+    post:
+      operationId: addSongsToPlaylist
+      tags: [Playlists]
+      summary: Thêm bài hát vào playlist
+      description: |
+        Lưu thông tin các video thành CustomSong (giống `POST /api/songs/info`),
+        rồi thêm các videoId chưa có vào playlist. Lưu ý đường dẫn dùng `playlist` (số ít).
+      parameters:
+        - $ref: "#/components/parameters/PlaylistIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VideoIdsInput"
+      responses:
+        "200":
+          description: Playlist sau khi thêm
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Playlist"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/PlaylistNotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/playlists/{id}/remove-song:
+    post:
+      operationId: removeSongFromPlaylist
+      tags: [Playlists]
+      summary: Gỡ một bài hát khỏi playlist
+      parameters:
+        - $ref: "#/components/parameters/PlaylistIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [videoId]
+              properties:
+                videoId:
+                  type: string
+                  example: dQw4w9WgXcQ
+      responses:
+        "200":
+          description: Playlist sau khi gỡ
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Playlist"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/PlaylistNotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  # ===================== History =====================
+  /api/history:
+    get:
+      operationId: listSearchHistory
+      tags: [History]
+      summary: Lấy lịch sử tìm kiếm
+      description: Mới nhất trước, tối đa 50 mục. Lịch sử hiện dùng chung cho mọi người dùng.
+      responses:
+        "200":
+          description: Danh sách lịch sử
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SearchHistory"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    post:
+      operationId: saveSearchHistory
+      tags: [History]
+      summary: Lưu một từ khoá
+      description: Từ khoá được chuyển sang chữ thường; nếu đã có thì xoá bản cũ rồi lưu lại để đưa lên đầu.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query:
+                  type: string
+                  example: lofi chill
+      responses:
+        "200":
+          description: Đã lưu
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+              example:
+                message: Đã lưu lịch sử tìm kiếm
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    delete:
+      operationId: clearSearchHistory
+      tags: [History]
+      summary: Xoá toàn bộ lịch sử
+      responses:
+        "200":
+          description: Đã xoá
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+              example:
+                message: Đã xóa toàn bộ lịch sử tìm kiếm
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/history/{query}:
+    delete:
+      operationId: deleteSearchHistoryItem
+      tags: [History]
+      summary: Xoá một từ khoá
+      description: So khớp chính xác (lịch sử lưu chữ thường). Trả 200 kể cả khi không có gì để xoá.
+      parameters:
+        - name: query
+          in: path
+          required: true
+          schema:
+            type: string
+          example: lofi chill
+      responses:
+        "200":
+          description: Đã xoá
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+              example:
+                message: Đã xóa lịch sử cho lofi chill
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  # ===================== Avatars =====================
+  /upload/avatars:
+    post:
+      operationId: uploadAvatar
+      tags: [Avatars]
+      summary: Upload ảnh đại diện
+      description: |
+        Chỉ nhận jpeg/jpg/png/gif. File được lưu thành `<username>.<đuôi>` và gắn vào
+        bản ghi Avatar đã tạo lúc đăng ký (cần `avatar: true` khi đăng ký).
+        Trường `username` phải đứng **trước** `avatar` trong form-data để đặt đúng tên file.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [username, avatar]
+              properties:
+                username:
+                  type: string
+                  example: duongdev
+                avatar:
+                  type: string
+                  format: binary
+            encoding:
+              avatar:
+                contentType: image/png, image/jpeg, image/gif
+      responses:
+        "201":
+          description: Upload thành công
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+              example:
+                message: Upload success
+        "400":
+          description: Không có file
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+              example:
+                message: No file uploaded
+        "500":
+          description: File không phải ảnh hoặc lỗi server
+          content:
+            text/html:
+              schema:
+                type: string
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+
+  /avatars/{username}:
+    get:
+      operationId: getAvatar
+      tags: [Avatars]
+      summary: Lấy file ảnh đại diện
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+          example: duongdev
+      responses:
+        "200":
+          description: File ảnh
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Chưa có avatar
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+              example:
+                message: Avatar not found
+        "500":
+          $ref: "#/components/responses/ServerMessage"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    VideoIdPath:
+      name: id
+      in: path
+      required: true
+      description: ID video YouTube
+      schema:
+        type: string
+      example: dQw4w9WgXcQ
+    PlaylistIdPath:
+      name: id
+      in: path
+      required: true
+      description: "`_id` của playlist (MongoDB ObjectId)"
+      schema:
+        type: string
+      example: 65f123abc123def456789012
+
+  responses:
+    BadRequest:
+      description: Thiếu hoặc sai tham số
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ServerError:
+      description: Lỗi server
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ServerMessage:
+      description: Lỗi server
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Message"
+          example:
+            message: Lỗi server
+    YouTubeError:
+      description: Thiếu YOUTUBE_API_KEY trên server, hoặc YouTube API báo lỗi (mã lỗi có thể là mã YouTube trả về)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            noKey:
+              value: { error: "YOUTUBE_API_KEY không được cấu hình" }
+            upstream:
+              value: { error: "Lỗi server", details: "Request failed with status code 403" }
+    PlaylistNotFound:
+      description: Không tìm thấy playlist
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: Không tìm thấy playlist
+    EnvelopeBadRequest:
+      description: Dữ liệu không hợp lệ
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/EnvelopeError"
+          example:
+            status: error
+            message: videoIds phải là một mảng các ID video
+            error: null
+    EnvelopeError:
+      description: Lỗi server
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/EnvelopeError"
+
+  schemas:
+    Message:
+      type: object
+      properties:
+        message:
+          type: string
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Lỗi server
+        details:
+          description: Chi tiết lỗi (chuỗi hoặc object trả về từ YouTube)
+          oneOf:
+            - type: string
+            - type: object
+
+    Envelope:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [success]
+        message:
+          type: string
+        data: {}
+
+    EnvelopeError:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [error]
+        message:
+          type: string
+        error:
+          nullable: true
+          type: string
+
+    RegisterInput:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          example: duongdev
+        password:
+          type: string
+          format: password
+          example: "123456"
+        avatar:
+          type: boolean
+          description: "`true` nếu sẽ upload ảnh đại diện sau khi đăng ký"
+          example: true
+
+    LoginInput:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          example: duongdev
+        password:
+          type: string
+          format: password
+          example: "123456"
+
+    User:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: 65f123abc123def456789012
+        username:
+          type: string
+          example: duongdev
+        avatar:
+          type: string
+          nullable: true
+          description: URL ảnh nếu đã upload. Nếu chưa có, giá trị là `null` (hoặc `false` với tài khoản đăng ký không chọn avatar).
+          example: http://localhost:8404/uploads/avatars/duongdev.png
+
+    SearchItem:
+      type: object
+      properties:
+        id:
+          type: string
+          example: dQw4w9WgXcQ
+        title:
+          type: string
+          example: Never Gonna Give You Up
+        artist:
+          type: string
+          description: Tên kênh YouTube
+          example: Rick Astley
+        thumbnail:
+          type: string
+          format: uri
+
+    VideoInfo:
+      type: object
+      properties:
+        id:
+          type: string
+          example: dQw4w9WgXcQ
+        title:
+          type: string
+          example: Never Gonna Give You Up
+        channel:
+          type: string
+          example: Rick Astley
+        thumbnail:
+          type: string
+          format: uri
+
+    VideoIdsInput:
+      type: object
+      required: [videoIds]
+      properties:
+        videoIds:
+          type: array
+          items:
+            type: string
+          example: [dQw4w9WgXcQ, 9bZkp7q19f0]
+
+    SongInput:
+      type: object
+      properties:
+        id:
+          type: string
+          description: videoId YouTube
+        name:
+          type: string
+        artist:
+          type: string
+        thumbnail:
+          type: string
+          format: uri
+        createdAt:
+          type: string
+          format: date-time
+          description: Ngày video được đăng trên YouTube
+        duration:
+          type: integer
+          description: Thời lượng (giây)
+
+    Song:
+      allOf:
+        - $ref: "#/components/schemas/SongInput"
+        - type: object
+          properties:
+            _id:
+              type: string
+            addedAt:
+              type: string
+              format: date-time
+              description: Thời điểm lưu vào hệ thống
+
+    Playlist:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: 65f123abc123def456789012
+        name:
+          type: string
+          example: Chill buổi tối
+        videos:
+          type: array
+          description: Danh sách videoId
+          items:
+            type: string
+          example: [dQw4w9WgXcQ]
+        thumbnail:
+          type: string
+          format: uri
+          example: http://localhost:8404/img/nezuko.jpg
+        createdAt:
+          type: string
+          format: date-time
+        userId:
+          type: string
+          nullable: true
+
+    SearchHistory:
+      type: object
+      properties:
+        _id:
+          type: string
+        query:
+          type: string
+          example: lofi chill
+        timestamp:
+          type: string
+          format: date-time

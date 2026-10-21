@@ -6,7 +6,7 @@
   "scripts": {
     "start": "nodemon --inspect index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "kill8404": "kill -9 $(lsof -t -i:8404)"
+    "kill8404": "npx kill-port 8404"
   },
   "keywords": [],
   "author": "",
@@ -25,7 +25,9 @@
     "mongodb": "^6.13.1",
     "mongoose": "^8.10.1",
     "multer": "^2.0.2",
-    "node-cache": "^5.1.2"
+    "node-cache": "^5.1.2",
+    "redoc-express": "^2.1.3",
+    "yamljs": "^0.3.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.9"

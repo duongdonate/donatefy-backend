@@ -16,16 +16,14 @@ const updateSong = async (id, songData) => {
 
 const getSongs = async (playlistId = null) => {
   const allSongs = await CustomSong.find();
-  if (playlistId){
+  if (playlistId) {
     const { videos } = await CustomPlaylist.findById(playlistId);
     console.log(videos);
-    
-    return allSongs.filter((song) => videos.includes(song.id))
+
+    return allSongs.filter((song) => videos.includes(song.id));
   }
   return allSongs;
-
 };
-
 
 module.exports = {
   getSongById,

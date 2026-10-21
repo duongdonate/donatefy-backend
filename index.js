@@ -42,8 +42,11 @@ app.use(
 // setup view engine
 app.set("view engine", "ejs");
 app.set("views", "./views");
-// route "/" hiển thị list endpoint
-app.get("/", (req, res) => {
+// "/" mở thẳng tài liệu API
+app.get("/", (req, res) => res.redirect("/docs"));
+
+// "/endpoints" hiển thị list endpoint
+app.get("/endpoints", (req, res) => {
   const endpoints = listEndpoints(app);
 
   // groupBy theo prefix
@@ -65,6 +68,74 @@ app.get("/", (req, res) => {
   grouped.filter((group) => group.length > 0 && group !== "//");
 
   res.render("index", { grouped });
+});
+
+// Set up Redoc documentation route
+const redoc = require("redoc-express");
+const YAML = require("yamljs");
+
+app.get(
+  "/docs",
+  redoc({
+    title: "API Docs",
+    specUrl: "/openapi.yml",
+    redocOptions: {
+      hideDownloadButton: false,
+      hideHostname: true,
+
+      theme: {
+        colors: {
+          primary: {
+            main: "#6366f1", // indigo dịu
+          },
+
+          text: {
+            primary: "#334155", // xám đậm (đỡ gắt hơn đen)
+            secondary: "#64748b",
+          },
+
+          background: {
+            primary: "#f8fafc", // trắng pha xám nhẹ
+          },
+
+          http: {
+            get: "#22c55e",
+            post: "#3b82f6",
+            put: "#eab308",
+            delete: "#ef4444",
+          },
+        },
+
+        sidebar: {
+          backgroundColor: "#f1f5f9",
+          textColor: "#475569",
+          activeTextColor: "#111827",
+        },
+
+        rightPanel: {
+          backgroundColor: "#64748e",
+        },
+
+        typography: {
+          fontFamily: "Inter, system-ui, sans-serif",
+
+          headings: {
+            fontWeight: "600",
+            color: "#0f172a",
+          },
+
+          code: {
+            backgroundColor: "#e2e8f0",
+            color: "#1e293b",
+          },
+        },
+      },
+    },
+  })
+);
+
+app.get("/openapi.yml", (req, res) => {
+  res.sendFile(path.join(__dirname, "docs/openapi.yml"));
 });
 
 // Xử lý lỗi chung
