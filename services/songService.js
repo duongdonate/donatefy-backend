@@ -1,3 +1,5 @@
+const mongoose = require("mongoose");
+const { orderAndMerge } = require("../utils/playlistSongs");
 const CustomSong = require("../models/CustomSong");
 const CustomPlaylist = require("../models/CustomPlaylist");
 
@@ -14,15 +16,14 @@ const updateSong = async (id, songData) => {
   return await CustomSong.findByIdAndUpdate(id, songData, { new: true });
 };
 
+// Không có playlistId: tất cả bài. Có: bài theo thứ tự thêm, kèm tên/bìa riêng; null nếu không có playlist
 const getSongs = async (playlistId = null) => {
-  const allSongs = await CustomSong.find();
-  if (playlistId) {
-    const { videos } = await CustomPlaylist.findById(playlistId);
-    console.log(videos);
-
-    return allSongs.filter((song) => videos.includes(song.id));
-  }
-  return allSongs;
+  if (!playlistId) return await CustomSong.find();
+  if (!mongoose.isValidObjectId(playlistId)) return null;
+  const playlist = await CustomPlaylist.findById(playlistId);
+  if (!playlist) return null;
+  const songs = await CustomSong.find({ id: { $in: playlist.videos } });
+  return orderAndMerge(playlist.videos, songs, playlist.meta);
 };
 
 module.exports = {

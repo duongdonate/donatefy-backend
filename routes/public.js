@@ -4,7 +4,6 @@ const CustomPlaylist = require("../models/CustomPlaylist");
 const CustomSong = require("../models/CustomSong");
 const path = require("path");
 const Avatar = require("../models/Avatar");
-const getRandomPlaylistCover = require("../utils/randomPlaylistCover");
 
 router.get("/playlists/:id", async (req, res) => {
   const { id } = req.params;
@@ -13,11 +12,7 @@ router.get("/playlists/:id", async (req, res) => {
     if (!playlist) {
       return res.status(404).json({ error: "Không tìm thấy playlist" });
     }
-    const playlistwithCover = {
-      ...playlist.toObject(),
-      cover: getRandomPlaylistCover(),
-    };
-    res.json(playlistwithCover);
+    res.json({ ...playlist.toJSON(), cover: playlist.thumbnail });
   } catch (error) {
     console.error("Lỗi khi lấy playlist:", error.message);
     res.status(500).json({ error: "Lỗi server", details: error.message });

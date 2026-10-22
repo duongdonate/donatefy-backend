@@ -35,7 +35,7 @@ app.use("/upload", uploadRoutes);
 app.use("/img", express.static(path.join(__dirname, "public/img")));
 app.use(
   "/uploads/avatars",
-  express.static(path.join(__dirname, "uploads/avatars"))
+  express.static(path.join(__dirname, "uploads/avatars")),
 );
 
 // Routes
@@ -131,7 +131,7 @@ app.get(
         },
       },
     },
-  })
+  }),
 );
 
 app.get("/openapi.yml", (req, res) => {
