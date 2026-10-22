@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "nodemon --inspect index.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test utils",
     "kill8404": "npx kill-port 8404"
   },
   "keywords": [],
