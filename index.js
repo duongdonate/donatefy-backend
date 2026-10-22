@@ -15,7 +15,7 @@ app.use(
   cors({
     origin: [process.env.FRONTEND_URL], // Đổi thành port của frontend React
     credentials: true,
-    methods: ["GET", "POST", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );

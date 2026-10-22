@@ -2,7 +2,7 @@ openapi: 3.0.3
 
 info:
   title: Donatefy API
-  version: 1.1.0
+  version: 1.2.0
   description: |
     Backend của Donatefy: tìm và lấy thông tin video YouTube, lưu bài hát,
     quản lý playlist, lịch sử tìm kiếm, đăng ký/đăng nhập và avatar.
@@ -305,7 +305,10 @@ paths:
       operationId: listSongs
       tags: [Songs]
       summary: Lấy danh sách bài hát
-      description: Không truyền `playlistId` thì trả tất cả bài hát; có `playlistId` thì chỉ trả các bài nằm trong playlist đó.
+      description: |
+        Không truyền `playlistId` thì trả tất cả bài hát. Có `playlistId` thì trả các bài trong playlist
+        theo đúng thứ tự thêm (thứ tự `videos`), tên/kênh/bìa riêng của playlist (`meta`) đè lên bản gốc,
+        bài có ghi đè mang `custom: true`.
       parameters:
         - name: playlistId
           in: query
@@ -326,7 +329,13 @@ paths:
                       data:
                         type: array
                         items:
-                          $ref: "#/components/schemas/Song"
+                          $ref: "#/components/schemas/PlaylistSong"
+        "404":
+          description: Không tìm thấy playlist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeError"
         "500":
           $ref: "#/components/responses/EnvelopeError"
 
@@ -359,7 +368,7 @@ paths:
       operationId: listPlaylists
       tags: [Playlists]
       summary: Lấy tất cả playlist
-      description: Mới nhất trước. Mỗi playlist có thêm `shareUrl` (trang playlist trên frontend) và `cover` (ảnh bìa ngẫu nhiên).
+      description: Mới nhất trước. Mỗi playlist có thêm `shareUrl` (trang playlist trên frontend) và `cover` (= `thumbnail`, ảnh bìa gán lúc tạo, cố định).
       responses:
         "200":
           description: Danh sách playlist
@@ -422,6 +431,62 @@ paths:
           $ref: "#/components/responses/ServerError"
 
   /api/playlists/{id}:
+    patch:
+      operationId: updatePlaylist
+      tags: [Playlists]
+      summary: Đổi tên playlist và/hoặc sửa tên, kênh, bìa riêng của một bài
+      description: |
+        Cần ít nhất một trong `name`, `song`. `song` ghi đè TOÀN BỘ meta của bài đó trong playlist này
+        (trường bỏ trống / không gửi thì về bản gốc của CustomSong; gửi chỉ `{ id }` là xoá hết ghi đè).
+        Bài gốc (CustomSong) không bị đổi. Không có API đổi thứ tự bài.
+      parameters:
+        - $ref: "#/components/parameters/PlaylistIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 60
+                  description: Tính sau khi trim
+                  example: Chill buổi tối
+                song:
+                  allOf:
+                    - type: object
+                      required: [id]
+                      properties:
+                        id:
+                          type: string
+                          description: videoId đang có trong playlist
+                          example: jfKfPfyJRdk
+                    - $ref: "#/components/schemas/SongMetaInput"
+      responses:
+        "200":
+          description: Playlist sau khi sửa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaylistWithCover"
+        "400":
+          description: "Thiếu cả name và song; name rỗng hoặc > 60 ký tự; thiếu song.id; tên/kênh > 200 ký tự; thumbnail không hợp lệ"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: Tên playlist dài 1–60 ký tự
+        "404":
+          description: Không tìm thấy playlist, hoặc `song.id` không có trong playlist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/ServerError"
     delete:
       operationId: deletePlaylist
       tags: [Playlists]
@@ -447,7 +512,7 @@ paths:
       operationId: getPlaylist
       tags: [Playlists]
       summary: Lấy một playlist
-      description: Kèm `cover` là ảnh bìa ngẫu nhiên (mỗi lần gọi có thể khác nhau).
+      description: Kèm `cover` (= `thumbnail`, ảnh bìa gán lúc tạo, cố định).
       parameters:
         - $ref: "#/components/parameters/PlaylistIdPath"
       responses:
@@ -456,13 +521,7 @@ paths:
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: "#/components/schemas/Playlist"
-                  - type: object
-                    properties:
-                      cover:
-                        type: string
-                        format: uri
+                $ref: "#/components/schemas/PlaylistWithCover"
         "404":
           $ref: "#/components/responses/PlaylistNotFound"
         "500":
@@ -474,8 +533,11 @@ paths:
       tags: [Playlists]
       summary: Thêm bài hát vào playlist
       description: |
-        Lưu thông tin các video thành CustomSong (giống `POST /api/songs/info`),
-        rồi thêm các videoId chưa có vào playlist. Lưu ý đường dẫn dùng `playlist` (số ít).
+        Bài chưa có trong CustomSong thì lấy từ YouTube và tạo mới (bài đã có không bị ghi đè).
+        Thêm vào cuối playlist các videoId chưa có trong playlist (id đã có thì bỏ qua; video
+        YouTube không trả về như link hỏng, đã xoá thì không thêm). `name`/`artist`/`thumbnail`
+        chỉ dùng khi `videoIds` có đúng 1 phần tử, lưu riêng cho playlist này (`meta`).
+        Lưu ý đường dẫn dùng `playlist` (số ít).
       parameters:
         - $ref: "#/components/parameters/PlaylistIdPath"
       requestBody:
@@ -483,16 +545,34 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/VideoIdsInput"
+              allOf:
+                - $ref: "#/components/schemas/VideoIdsInput"
+                - $ref: "#/components/schemas/SongMetaInput"
+            example:
+              videoIds: [jfKfPfyJRdk]
+              name: Lofi học bài
+              thumbnail: https://i.ytimg.com/vi/jfKfPfyJRdk/hq2.jpg
       responses:
         "200":
-          description: Playlist sau khi thêm
+          description: Playlist sau khi thêm và số bài thực sự được thêm
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Playlist"
+                type: object
+                properties:
+                  playlist:
+                    $ref: "#/components/schemas/PlaylistWithCover"
+                  added:
+                    type: integer
+                    example: 1
         "400":
-          $ref: "#/components/responses/BadRequest"
+          description: "videoIds thiếu, rỗng hoặc có id không đúng dạng 11 ký tự; tên/kênh > 200 ký tự; thumbnail không hợp lệ"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: Ảnh bìa không hợp lệ
         "404":
           $ref: "#/components/responses/PlaylistNotFound"
         "500":
@@ -503,6 +583,7 @@ paths:
       operationId: removeSongFromPlaylist
       tags: [Playlists]
       summary: Gỡ một bài hát khỏi playlist
+      description: Xoá luôn tên/kênh/bìa riêng (`meta`) của bài đó trong playlist.
       parameters:
         - $ref: "#/components/parameters/PlaylistIdPath"
       requestBody:
@@ -960,6 +1041,13 @@ components:
           items:
             type: string
           example: [dQw4w9WgXcQ]
+        meta:
+          type: object
+          description: Tên/kênh/bìa riêng theo videoId (chỉ bài đã sửa)
+          additionalProperties:
+            $ref: "#/components/schemas/SongMetaInput"
+          example:
+            dQw4w9WgXcQ: { name: Bài ruột }
         thumbnail:
           type: string
           format: uri
@@ -970,6 +1058,42 @@ components:
         userId:
           type: string
           nullable: true
+
+    SongMetaInput:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          description: Tính sau khi trim; rỗng thì dùng tên gốc
+        artist:
+          type: string
+          maxLength: 200
+          description: Tên kênh; tính sau khi trim; rỗng thì dùng bản gốc
+        thumbnail:
+          type: string
+          format: uri
+          description: "Chỉ nhận `https://i.ytimg.com/vi/<videoId>/(hqdefault|hq1|hq2|hq3).jpg` của chính bài đó"
+          example: https://i.ytimg.com/vi/jfKfPfyJRdk/hq2.jpg
+
+    PlaylistSong:
+      allOf:
+        - $ref: "#/components/schemas/Song"
+        - type: object
+          properties:
+            custom:
+              type: boolean
+              description: Có mặt (`true`) khi tên/kênh/bìa đã được sửa riêng trong playlist này
+
+    PlaylistWithCover:
+      allOf:
+        - $ref: "#/components/schemas/Playlist"
+        - type: object
+          properties:
+            cover:
+              type: string
+              format: uri
+              description: Bằng `thumbnail` (cố định)
 
     SearchHistory:
       type: object

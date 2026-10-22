@@ -9,6 +9,8 @@ const songService = require("../services/songService");
 const CustomSong = require("../models/CustomSong");
 const getRandomPlaylistCover = require("../utils/randomPlaylistCover");
 const parseToSeconds = require("../utils/parseToSeconds");
+const mongoose = require("mongoose");
+const { normalizeMeta } = require("../utils/playlistSongs");
 
 const Res = require("../utils/Res");
 
@@ -235,7 +237,7 @@ router.get("/playlists", async (req, res) => {
     const playlistsWithShareUrl = playlists.map((playlist) => ({
       ...playlist._doc,
       shareUrl: `${FRONTEND}/playlist/${playlist._id}`,
-      cover: getRandomPlaylistCover(),
+      cover: playlist.thumbnail, // bìa gán lúc tạo, cố định
     }));
     Res.success(res, playlistsWithShareUrl, "Lấy playlists thành công");
   } catch (error) {
@@ -246,54 +248,106 @@ router.get("/playlists", async (req, res) => {
   }
 });
 
+const VIDEO_ID = /^[\w-]{11}$/;
+const withCover = (playlist) => ({ ...playlist.toJSON(), cover: playlist.thumbnail });
+const findPlaylist = (id) => (mongoose.isValidObjectId(id) ? CustomPlaylist.findById(id) : null);
+
 router.post("/playlist/:id/add-song", async (req, res) => {
   const { id } = req.params;
-  const { videoIds } = req.body;
+  const { videoIds, name, artist, thumbnail } = req.body;
 
-  if (!videoIds || !Array.isArray(videoIds)) {
+  if (!Array.isArray(videoIds) || !videoIds.length || !videoIds.every((v) => VIDEO_ID.test(v))) {
     return res.status(400).json({ error: "videoIds là bắt buộc" });
   }
-
-  try {
-    // Gọi YouTube Data API để lấy thông tin video
-    const data = await apiYoutubeService.fetchYouTubeVideos(videoIds);
-
-    // Chuyển đổi dữ liệu API thành định dạng phù hợp với CustomSong
-    const videos = data.items.map((item) => ({
-      id: item.id,
-      name: item.snippet.title,
-      artist: item.snippet.channelTitle,
-      thumbnail: item.snippet.thumbnails.high.url,
-      createdAt: item.snippet.publishedAt,
-      duration: parseToSeconds(item.contentDetails.duration),
-    }));
-
-    videos.forEach((video) => {
-      songService.createSong(video);
-    });
-  } catch (error) {
-    console.error("Error fetching video details:", error);
-    Res.error(res, "Lỗi khi tạo bài hát từ URL", 500, error.message);
+  // Tên/kênh/bìa riêng chỉ nhận khi thêm đúng một bài
+  let meta = {};
+  if (videoIds.length === 1) {
+    const result = normalizeMeta(videoIds[0], { name, artist, thumbnail });
+    if (!result.ok) return res.status(400).json({ error: result.error });
+    meta = result.meta;
   }
 
   try {
-    const playlist = await CustomPlaylist.findById(id);
+    const playlist = await findPlaylist(id);
     if (!playlist) {
       return res.status(404).json({ error: "Không tìm thấy playlist" });
     }
-    for (const videoId of videoIds) {
-      if (!playlist.videos.includes(videoId)) {
-        playlist.videos.push(videoId);
-        await playlist.save();
-        console.log(`Đã thêm bài hát ${videoId} vào playlist ${id}`); // Log thêm thành công
-      }
+    const newIds = [...new Set(videoIds)].filter((v) => !playlist.videos.includes(v));
+
+    // Chỉ lấy từ YouTube những bài chưa có trong CustomSong, không ghi đè bài đã có
+    const existing = (await CustomSong.find({ id: { $in: newIds } })).map((s) => s.id);
+    const missing = newIds.filter((v) => !existing.includes(v));
+    let fetched = [];
+    if (missing.length) {
+      const data = await apiYoutubeService.fetchYouTubeVideos(missing);
+      fetched = data.items.map((item) => ({
+        id: item.id,
+        name: item.snippet.title,
+        artist: item.snippet.channelTitle,
+        thumbnail: item.snippet.thumbnails.high.url,
+        createdAt: item.snippet.publishedAt,
+        duration: parseToSeconds(item.contentDetails.duration),
+      }));
+      await CustomSong.insertMany(fetched, { ordered: false }).catch((e) => {
+        if (e.code !== 11000) throw e; // bài vừa được tạo song song thì bỏ qua
+      });
     }
-    res.json(playlist);
+
+    // Video không có trên YouTube (link hỏng / đã xoá) thì không thêm
+    const fetchedIds = fetched.map((v) => v.id);
+    const toAdd = newIds.filter((v) => existing.includes(v) || fetchedIds.includes(v));
+    playlist.videos.push(...toAdd);
+    if (toAdd.length === 1 && Object.keys(meta).length) playlist.meta.set(toAdd[0], meta);
+    if (toAdd.length) await playlist.save();
+    console.log(`Đã thêm ${toAdd.length} bài vào playlist ${id}`);
+    res.json({ playlist: withCover(playlist), added: toAdd.length });
   } catch (error) {
     console.error("Lỗi khi thêm video vào playlist:", error.message);
     res
       .status(500)
       .json({ error: "Lỗi khi thêm video", details: error.message });
+  }
+});
+
+// Đổi tên playlist và/hoặc ghi tên/kênh/bìa riêng của một bài trong playlist
+router.patch("/playlists/:id", async (req, res) => {
+  const { name, song } = req.body;
+  if (name === undefined && song === undefined) {
+    return res.status(400).json({ error: "Cần name hoặc song" });
+  }
+  const trimmed = typeof name === "string" ? name.trim() : "";
+  if (name !== undefined && (trimmed.length < 1 || trimmed.length > 60)) {
+    return res.status(400).json({ error: "Tên playlist dài 1–60 ký tự" });
+  }
+  let meta;
+  if (song !== undefined) {
+    if (!song || typeof song.id !== "string") {
+      return res.status(400).json({ error: "song.id là bắt buộc" });
+    }
+    const result = normalizeMeta(song.id, song);
+    if (!result.ok) return res.status(400).json({ error: result.error });
+    meta = result.meta;
+  }
+
+  try {
+    const playlist = await findPlaylist(req.params.id);
+    if (!playlist) {
+      return res.status(404).json({ error: "Không tìm thấy playlist" });
+    }
+    if (song !== undefined && !playlist.videos.includes(song.id)) {
+      return res.status(404).json({ error: "Bài hát không có trong playlist" });
+    }
+    if (name !== undefined) playlist.name = trimmed;
+    // Ghi đè toàn bộ meta của bài; trường bỏ trống thì về bản gốc
+    if (meta && Object.keys(meta).length) playlist.meta.set(song.id, meta);
+    else if (meta) playlist.meta.delete(song.id);
+    await playlist.save();
+    res.json(withCover(playlist));
+  } catch (error) {
+    console.error("Lỗi khi sửa playlist:", error.message);
+    res
+      .status(500)
+      .json({ error: "Lỗi khi sửa playlist", details: error.message });
   }
 });
 
@@ -312,6 +366,7 @@ router.post("/playlists/:id/remove-song", async (req, res) => {
     }
 
     playlist.videos = playlist.videos.filter((vid) => vid !== videoId);
+    playlist.meta.delete(videoId);
     await playlist.save();
     console.log(`Đã xóa video ${videoId} khỏi playlist ${id}`); // Log xóa thành công
     res.json(playlist);
