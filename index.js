@@ -4,6 +4,7 @@ const express = require("express");
 const connectDB = require("./db.js");
 const cors = require("cors");
 const path = require("path");
+const parseOrigins = require("./utils/parseOrigins");
 
 const app = express();
 const port = process.env.PORT || 8404; // Thêm giá trị mặc định nếu PORT không được định nghĩa
@@ -11,15 +12,14 @@ const listEndpoints = require("express-list-endpoints");
 
 // Middleware
 app.use(express.json());
-app.use(
-  cors({
-    origin: [process.env.FRONTEND_URL], // Đổi thành port của frontend React
-    credentials: true,
-    methods: ["GET", "POST", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
-app.options("*", cors());
+const corsOptions = {
+  origin: parseOrigins(process.env.FRONTEND_URL), // Chỉ các địa chỉ frontend liệt kê trong FRONTEND_URL
+  credentials: true,
+  methods: ["GET", "POST", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+};
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 connectDB();
 
 const apiRoutes = require("./routes/api");
