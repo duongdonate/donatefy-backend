@@ -16,14 +16,12 @@ router.get("/me", checkAuth, async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
-    if (!user.avatar) {
+    if (Boolean.valueOf(user.avatar) == false) {
       return res.json({ user });
     } else {
       const avatar = await Avatar.findOne({ userId: user._id });
       if (avatar && avatar.filename) {
-        user.avatar = `${req.protocol}://${req.get("host")}/uploads/avatars/${
-          avatar.filename
-        }`;
+        user.avatar = `${process.env.BASE_URL}/uploads/avatars/${avatar.filename}`;
       } else {
         user.avatar = null;
       }
@@ -47,7 +45,7 @@ router.post("/login", async (req, res) => {
     }
 
     const token = jwt.sign({ id: userFound._id }, secretKey, {
-      expiresIn: "1h",
+      expiresIn: "2h",
     });
     res.json({ access_token: token });
   } catch (error) {

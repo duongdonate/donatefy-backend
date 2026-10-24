@@ -45,16 +45,9 @@ router.get("/avatars/:username", async (req, res) => {
     const filePath = path.join(
       __dirname,
       "../uploads/avatars/",
-      avatar.filename
+      avatar.filename,
     );
     res.sendFile(filePath);
-
-    // const avatarUrl = `${req.protocol}://${req.get("host")}/uploads/avatars/${
-    //   avatar.filename
-    // }`;
-
-    // // Trả về link URL
-    // res.json({ avatarUrl });
   } catch (err) {
     return res.status(500).json({ message: err.message });
   }
