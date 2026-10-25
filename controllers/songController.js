@@ -50,7 +50,7 @@ const getSongs = async (req, res) => {
       songs = await songService.getSongs();
       Res.success(res, songs, "Lấy tất cả bài hát thành công");
     } else {
-      songs = await songService.getSongs(playlistId);
+      songs = await songService.getSongs(playlistId, req.userId);
       if (!songs) return Res.notFound(res, "Không tìm thấy playlist");
       Res.success(res, songs, "Lấy bài hát trong playlist thành công");
     }

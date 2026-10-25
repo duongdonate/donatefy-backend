@@ -8,7 +8,7 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase(); // lấy đuôi file
-    const username = req.body.username || "unknown"; // lấy username từ form-data
+    const username = req.username; // username lấy từ token (routes/upload.js)
     const filename = `${username}${ext}`; // đặt tên file là username + đuôi file
     req.savedFilename = filename; // lưu tên file vào req để dùng sau này
     cb(null, filename);

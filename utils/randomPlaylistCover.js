@@ -1,13 +1,13 @@
 const fs = require("fs");
 const path = require("path");
 
+// Đọc danh sách ảnh bìa một lần khi nạp module
+const images = fs
+  .readdirSync(path.join(__dirname, "../public/img"))
+  .filter((file) => /\.(jpg|jpeg|png|gif)$/.test(file));
+
 function getRandomPlaylistCover() {
   const baseURL = process.env.BASE_URL || "http://localhost:8404"; // Lấy URL từ biến môi trường
-  const imagesDir = path.join(__dirname, "../public/img");
-  const images = fs
-    .readdirSync(imagesDir)
-    .filter((file) => /\.(jpg|jpeg|png|gif)$/.test(file));
-
   if (images.length === 0) {
     throw new Error("No images found in the directory");
   }

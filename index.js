@@ -29,9 +29,9 @@ const publicRoutes = require("./routes/public");
 const authRoutes = require("./routes/auth");
 const uploadRoutes = require("./routes/upload");
 
+app.use("/api/auth", authRoutes); // trước /api: apiRoutes bắt checkAuth cho mọi đường còn lại
 app.use("/api", apiRoutes);
 app.use("/", publicRoutes);
-app.use("/api/auth", authRoutes);
 app.use("/upload", uploadRoutes);
 // Cấu hình để phục vụ tệp tĩnh từ thư mục
 app.use("/img", express.static(path.join(__dirname, "public/img")));

@@ -8,7 +8,7 @@ const uploadImage = async (req, res) => {
     }
 
     const filename = req.savedFilename;
-    const username = req.body.username;
+    const username = req.username;
 
     // Cập nhật bản ghi Avatar
     const avatar = await Avatar.findOneAndUpdate(

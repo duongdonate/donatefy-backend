@@ -13,10 +13,11 @@ info:
       (thành công) hoặc `{ status: "error", message, error }` (lỗi).
       Các route này được đánh dấu bằng schema `*Envelope`.
 
-    **Xác thực.** Chỉ `GET /api/auth/me` yêu cầu JWT (header `Authorization: Bearer <token>`).
+    **Xác thực.** Mọi route dữ liệu yêu cầu JWT (header `Authorization: Bearer <token>`), trừ
+    `GET /api/search`, `GET /api/video/{id}`, `GET /songs/{id}`, `GET /avatars/{username}` và `/api/auth/*` (login, register, refresh, logout).
+    Playlist thuộc về người tạo: không phải chủ (hoặc id sai dạng) đều trả **404**, không trả 403.
     Access token có hạn 1 giờ. Đăng nhập/đăng ký còn đặt cookie httpOnly `refresh_token`
     (7 ngày, trượt, path `/api/auth`); gọi `POST /api/auth/refresh` để lấy access token mới.
-    Các route còn lại hiện không kiểm tra đăng nhập.
 
 security: []
 
@@ -281,7 +282,11 @@ paths:
             minLength: 11
             maxLength: 11
           example: dQw4w9WgXcQ
+      security:
+        - bearerAuth: []
       responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "200":
           description: Danh sách gợi ý
           content:
@@ -320,7 +325,11 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/VideoIdsInput"
+      security:
+        - bearerAuth: []
       responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "200":
           description: Danh sách bài hát vừa tạo
           content:
@@ -365,7 +374,11 @@ paths:
           schema:
             type: string
           example: 65f123abc123def456789012
+      security:
+        - bearerAuth: []
       responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "200":
           description: Danh sách bài hát
           content:
@@ -416,9 +429,13 @@ paths:
     get:
       operationId: listPlaylists
       tags: [Playlists]
-      summary: Lấy tất cả playlist
+      summary: Lấy playlist của người đang đăng nhập
       description: Mới nhất trước. Mỗi playlist có thêm `shareUrl` (trang playlist trên frontend) và `cover` (= `thumbnail`, ảnh bìa gán lúc tạo, cố định).
+      security:
+        - bearerAuth: []
       responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "200":
           description: Danh sách playlist
           content:
@@ -438,7 +455,7 @@ paths:
                                 shareUrl:
                                   type: string
                                   format: uri
-                                  example: https://donatefy.vercel.app/playlist/65f123abc123def456789012
+                                  example: https://donatefy.vercel.app/playlists/65f123abc123def456789012
                                 cover:
                                   type: string
                                   format: uri
@@ -467,7 +484,11 @@ paths:
                   items:
                     type: string
                   example: [dQw4w9WgXcQ]
+      security:
+        - bearerAuth: []
       responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "201":
           description: Playlist vừa tạo
           content:
@@ -513,7 +534,11 @@ paths:
                           description: videoId đang có trong playlist
                           example: jfKfPfyJRdk
                     - $ref: "#/components/schemas/SongMetaInput"
+      security:
+        - bearerAuth: []
       responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "200":
           description: Playlist sau khi sửa
           content:
@@ -542,7 +567,11 @@ paths:
       summary: Xoá playlist
       parameters:
         - $ref: "#/components/parameters/PlaylistIdPath"
+      security:
+        - bearerAuth: []
       responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "200":
           description: Đã xoá
           content:
@@ -564,7 +593,11 @@ paths:
       description: Kèm `cover` (= `thumbnail`, ảnh bìa gán lúc tạo, cố định).
       parameters:
         - $ref: "#/components/parameters/PlaylistIdPath"
+      security:
+        - bearerAuth: []
       responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "200":
           description: Playlist
           content:
@@ -601,7 +634,11 @@ paths:
               videoIds: [jfKfPfyJRdk]
               name: Lofi học bài
               thumbnail: https://i.ytimg.com/vi/jfKfPfyJRdk/hq2.jpg
+      security:
+        - bearerAuth: []
       responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "200":
           description: Playlist sau khi thêm và số bài thực sự được thêm
           content:
@@ -646,7 +683,11 @@ paths:
                 videoId:
                   type: string
                   example: dQw4w9WgXcQ
+      security:
+        - bearerAuth: []
       responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "200":
           description: Playlist sau khi gỡ
           content:
@@ -667,7 +708,11 @@ paths:
       tags: [History]
       summary: Lấy lịch sử tìm kiếm
       description: Mới nhất trước, tối đa 50 mục. Lịch sử hiện dùng chung cho mọi người dùng.
+      security:
+        - bearerAuth: []
       responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "200":
           description: Danh sách lịch sử
           content:
@@ -694,7 +739,11 @@ paths:
                 query:
                   type: string
                   example: lofi chill
+      security:
+        - bearerAuth: []
       responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "200":
           description: Đã lưu
           content:
@@ -711,7 +760,11 @@ paths:
       operationId: clearSearchHistory
       tags: [History]
       summary: Xoá toàn bộ lịch sử
+      security:
+        - bearerAuth: []
       responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "200":
           description: Đã xoá
           content:
@@ -736,7 +789,11 @@ paths:
           schema:
             type: string
           example: lofi chill
+      security:
+        - bearerAuth: []
       responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "200":
           description: Đã xoá
           content:
@@ -755,27 +812,27 @@ paths:
       tags: [Avatars]
       summary: Upload ảnh đại diện
       description: |
-        Chỉ nhận jpeg/jpg/png/gif. File được lưu thành `<username>.<đuôi>` và gắn vào
-        bản ghi Avatar đã tạo lúc đăng ký (cần `avatar: true` khi đăng ký).
-        Trường `username` phải đứng **trước** `avatar` trong form-data để đặt đúng tên file.
+        Chỉ nhận jpeg/jpg/png/gif. File được lưu thành `<username>.<đuôi>` với username của
+        người trong token (không đọc form) và gắn vào bản ghi Avatar đã tạo lúc đăng ký.
       requestBody:
         required: true
         content:
           multipart/form-data:
             schema:
               type: object
-              required: [username, avatar]
+              required: [avatar]
               properties:
-                username:
-                  type: string
-                  example: duongdev
                 avatar:
                   type: string
                   format: binary
             encoding:
               avatar:
                 contentType: image/png, image/jpeg, image/gif
+      security:
+        - bearerAuth: []
       responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "201":
           description: Upload thành công
           content:
@@ -863,6 +920,17 @@ components:
       example: 65f123abc123def456789012
 
   responses:
+    Unauthorized:
+      description: Thiếu token hoặc token không hợp lệ / hết hạn
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Message"
+          examples:
+            noToken:
+              value: { message: "No token, not authorized" }
+            invalid:
+              value: { message: "Unauthorized, token invalid" }
     BadRequest:
       description: Thiếu hoặc sai tham số
       content:
@@ -895,7 +963,7 @@ components:
             upstream:
               value: { error: "Lỗi server", details: "Request failed with status code 403" }
     PlaylistNotFound:
-      description: Không tìm thấy playlist
+      description: Không tìm thấy playlist, hoặc playlist không phải của người đang đăng nhập
       content:
         application/json:
           schema:
