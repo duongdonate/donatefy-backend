@@ -6,6 +6,7 @@ const User = require("../models/User");
 const Avatar = require("../models/Avatar");
 const checkRegister = require("../middleware/checkRegister");
 const checkAuth = require("../middleware/checkAuth");
+const { verifyGoogleCredential, findOrCreateGoogleUser } = require("../services/googleAuth");
 const { issueSession, refreshSession, endSession } = require("../services/sessionService");
 
 router.get("/me", checkAuth, async (req, res) => {
@@ -14,7 +15,7 @@ router.get("/me", checkAuth, async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
-    if (Boolean.valueOf(user.avatar) == false) {
+    if (Boolean.valueOf(user.avatar) == false || /^http/.test(user.avatar)) {
       return res.json({ user });
     } else {
       const avatar = await Avatar.findOne({ userId: user._id });
@@ -36,7 +37,7 @@ router.post("/login", async (req, res) => {
   const { username, password } = req.body;
   try {
     const userFound = await User.findOne({ username });
-    if (!userFound || !(await bcrypt.compare(password, userFound.password))) {
+    if (!userFound || !userFound.password || !(await bcrypt.compare(password, userFound.password))) {
       return res
         .status(401)
         .json({ message: "Tên tài khoản hoặc mật khẩu không chính xác" });
@@ -45,6 +46,22 @@ router.post("/login", async (req, res) => {
     res.json(await issueSession(res, String(userFound._id)));
   } catch (error) {
     console.error("Login error:", error);
+    res.status(500).json({ message: "Lỗi server" });
+  }
+});
+
+router.post("/google", async (req, res) => {
+  let payload;
+  try {
+    payload = await verifyGoogleCredential(req.body?.credential);
+  } catch {
+    return res.status(401).json({ message: "Đăng nhập Google thất bại" });
+  }
+  try {
+    const user = await findOrCreateGoogleUser(payload);
+    res.json(await issueSession(res, String(user._id)));
+  } catch (error) {
+    console.error("Google login error:", error);
     res.status(500).json({ message: "Lỗi server" });
   }
 });
