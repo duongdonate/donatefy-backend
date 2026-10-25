@@ -30,6 +30,7 @@ MONGO_URI=<your-mongodb-uri>
 YOUTUBE_API_KEY=<your-youtube-api-key>
 PORT=8404
 FRONTEND_URL=http://localhost:5173
+GOOGLE_CLIENT_ID=<google-oauth-client-id>
 ```
 
 `FRONTEND_URL` nhận nhiều địa chỉ cách nhau bằng dấu phẩy (vd. `http://localhost:5173,https://<link-xem-thử>.vercel.app`); CORS chỉ cho đúng các địa chỉ này.
