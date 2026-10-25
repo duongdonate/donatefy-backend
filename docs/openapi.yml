@@ -609,7 +609,7 @@ paths:
         "500":
           $ref: "#/components/responses/ServerError"
 
-  /api/playlist/{id}/add-song:
+  /api/playlists/{id}/add-song:
     post:
       operationId: addSongsToPlaylist
       tags: [Playlists]
@@ -961,7 +961,11 @@ components:
             noKey:
               value: { error: "YOUTUBE_API_KEY không được cấu hình" }
             upstream:
-              value: { error: "Lỗi server", details: "Request failed with status code 403" }
+              value:
+                {
+                  error: "Lỗi server",
+                  details: "Request failed with status code 403",
+                }
     PlaylistNotFound:
       description: Không tìm thấy playlist, hoặc playlist không phải của người đang đăng nhập
       content:

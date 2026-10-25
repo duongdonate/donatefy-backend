@@ -57,7 +57,7 @@ router.get("/search", checkApiKey, async (req, res) => {
           type: "video",
           key: process.env.YOUTUBE_API_KEY,
         },
-      }
+      },
     );
     const items = response.data.items
       .filter((item) => item.id.videoId)
@@ -103,7 +103,7 @@ router.get("/video/:id", checkApiKey, async (req, res) => {
           id,
           key: process.env.YOUTUBE_API_KEY,
         },
-      }
+      },
     );
 
     if (!response.data.items || response.data.items.length === 0) {
@@ -233,12 +233,17 @@ router.post("/playlists", async (req, res) => {
 });
 
 // Link chia sẻ trỏ về trang /playlists/:id của frontend (lấy địa chỉ đầu tiên nếu FRONTEND_URL là danh sách)
-const FRONTEND = (process.env.FRONTEND_URL || "http://localhost:5173").split(",")[0].trim().replace(/\/$/, "");
+const FRONTEND = (process.env.FRONTEND_URL || "http://localhost:5173")
+  .split(",")[0]
+  .trim()
+  .replace(/\/$/, "");
 
 // Lấy tất cả playlists
 router.get("/playlists", async (req, res) => {
   try {
-    const playlists = await CustomPlaylist.find({ userId: req.userId }).sort({ createdAt: -1 });
+    const playlists = await CustomPlaylist.find({ userId: req.userId }).sort({
+      createdAt: -1,
+    });
     const playlistsWithShareUrl = playlists.map((playlist) => ({
       ...playlist._doc,
       shareUrl: `${FRONTEND}/playlists/${playlist._id}`,
@@ -254,17 +259,24 @@ router.get("/playlists", async (req, res) => {
 });
 
 const VIDEO_ID = /^[\w-]{11}$/;
-const withCover = (playlist) => ({ ...playlist.toJSON(), cover: playlist.thumbnail });
+const withCover = (playlist) => ({
+  ...playlist.toJSON(),
+  cover: playlist.thumbnail,
+});
 const findOwned = (id, userId) => {
   const filter = ownedFilter(id, userId);
   return filter && CustomPlaylist.findOne(filter);
 };
 
-router.post("/playlist/:id/add-song", async (req, res) => {
+router.post("/playlists/:id/add-song", async (req, res) => {
   const { id } = req.params;
   const { videoIds, name, artist, thumbnail } = req.body;
 
-  if (!Array.isArray(videoIds) || !videoIds.length || !videoIds.every((v) => VIDEO_ID.test(v))) {
+  if (
+    !Array.isArray(videoIds) ||
+    !videoIds.length ||
+    !videoIds.every((v) => VIDEO_ID.test(v))
+  ) {
     return res.status(400).json({ error: "videoIds là bắt buộc" });
   }
   // Tên/kênh/bìa riêng chỉ nhận khi thêm đúng một bài
@@ -280,10 +292,14 @@ router.post("/playlist/:id/add-song", async (req, res) => {
     if (!playlist) {
       return res.status(404).json({ error: "Không tìm thấy playlist" });
     }
-    const newIds = [...new Set(videoIds)].filter((v) => !playlist.videos.includes(v));
+    const newIds = [...new Set(videoIds)].filter(
+      (v) => !playlist.videos.includes(v),
+    );
 
     // Chỉ lấy từ YouTube những bài chưa có trong CustomSong, không ghi đè bài đã có
-    const existing = (await CustomSong.find({ id: { $in: newIds } })).map((s) => s.id);
+    const existing = (await CustomSong.find({ id: { $in: newIds } })).map(
+      (s) => s.id,
+    );
     const missing = newIds.filter((v) => !existing.includes(v));
     let fetched = [];
     if (missing.length) {
@@ -303,9 +319,12 @@ router.post("/playlist/:id/add-song", async (req, res) => {
 
     // Video không có trên YouTube (link hỏng / đã xoá) thì không thêm
     const fetchedIds = fetched.map((v) => v.id);
-    const toAdd = newIds.filter((v) => existing.includes(v) || fetchedIds.includes(v));
+    const toAdd = newIds.filter(
+      (v) => existing.includes(v) || fetchedIds.includes(v),
+    );
     playlist.videos.push(...toAdd);
-    if (toAdd.length === 1 && Object.keys(meta).length) playlist.meta.set(toAdd[0], meta);
+    if (toAdd.length === 1 && Object.keys(meta).length)
+      playlist.meta.set(toAdd[0], meta);
     if (toAdd.length) await playlist.save();
     console.log(`Đã thêm ${toAdd.length} bài vào playlist ${id}`);
     res.json({ playlist: withCover(playlist), added: toAdd.length });
@@ -403,7 +422,7 @@ router.get("/recommend", checkApiKey, async (req, res) => {
           id: videoId,
           key: process.env.YOUTUBE_API_KEY,
         },
-      }
+      },
     );
 
     if (!videoResponse.data.items || videoResponse.data.items.length === 0) {
@@ -423,7 +442,7 @@ router.get("/recommend", checkApiKey, async (req, res) => {
           maxResults: 10,
           key: process.env.YOUTUBE_API_KEY,
         },
-      }
+      },
     );
 
     const recommendations = searchResponse.data.items
@@ -439,7 +458,7 @@ router.get("/recommend", checkApiKey, async (req, res) => {
   } catch (error) {
     console.error(
       "Error fetching recommendations:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     res.status(error.response?.status || 500).json({
       error: "Failed to fetch recommendations",
