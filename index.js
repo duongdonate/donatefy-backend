@@ -15,7 +15,7 @@ app.use(express.json());
 const corsOptions = {
   origin: parseOrigins(process.env.FRONTEND_URL), // Chỉ các địa chỉ frontend liệt kê trong FRONTEND_URL
   credentials: true,
-  methods: ["GET", "POST", "DELETE", "OPTIONS"],
+  methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
 };
 app.use(cors(corsOptions));
