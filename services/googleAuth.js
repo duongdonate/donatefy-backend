@@ -5,6 +5,8 @@ const { makeUsername } = require("../utils/googleUser");
 const client = new OAuth2Client();
 
 async function verifyGoogleCredential(credential) {
+  // thiếu audience thì thư viện bỏ qua kiểm tra: phải chặn
+  if (!process.env.GOOGLE_CLIENT_ID) throw new Error("Thiếu GOOGLE_CLIENT_ID");
   const ticket = await client.verifyIdToken({
     idToken: credential,
     audience: process.env.GOOGLE_CLIENT_ID,
