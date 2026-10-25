@@ -34,12 +34,17 @@ async function refreshSession(req, res) {
     const state = checkRefresh(doc, hash, new Date());
     if (state === "current") {
       const next = newRefreshToken();
-      doc.prevHash = doc.tokenHash;
-      doc.tokenHash = hashToken(next);
-      doc.rotatedAt = new Date();
-      doc.expiresAt = new Date(Date.now() + REFRESH_MS);
-      await doc.save();
-      res.cookie(COOKIE, next, cookieOpts());
+      // Xoay nguyên tử: nếu request khác đã xoay trước thì không khớp, rơi về grace.
+      const rotated = await RefreshToken.findOneAndUpdate(
+        { _id: doc._id, tokenHash: hash },
+        { $set: {
+          prevHash: hash,
+          tokenHash: hashToken(next),
+          rotatedAt: new Date(),
+          expiresAt: new Date(Date.now() + REFRESH_MS),
+        } },
+      );
+      if (rotated) res.cookie(COOKIE, next, cookieOpts());
       return { access_token: sign(doc.userId) };
     }
     if (state === "grace") return { access_token: sign(doc.userId) };
