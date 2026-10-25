@@ -3,6 +3,7 @@ require("dotenv").config(); // Chỉ gọi một lần
 const express = require("express");
 const connectDB = require("./db.js");
 const cors = require("cors");
+const cookieParser = require("cookie-parser");
 const path = require("path");
 const parseOrigins = require("./utils/parseOrigins");
 
@@ -12,6 +13,7 @@ const listEndpoints = require("express-list-endpoints");
 
 // Middleware
 app.use(express.json());
+app.use(cookieParser());
 const corsOptions = {
   origin: parseOrigins(process.env.FRONTEND_URL), // Chỉ các địa chỉ frontend liệt kê trong FRONTEND_URL
   credentials: true,
@@ -72,7 +74,6 @@ app.get("/endpoints", (req, res) => {
 
 // Set up Redoc documentation route
 const redoc = require("redoc-express");
-const YAML = require("yamljs");
 
 app.get(
   "/docs",
