@@ -55,7 +55,10 @@ async function refreshSession(req, res) {
 
 async function endSession(req, res) {
   const token = req.cookies?.[COOKIE];
-  if (token) await RefreshToken.deleteOne({ tokenHash: hashToken(token) });
+  if (token) {
+    const h = hashToken(token);
+    await RefreshToken.deleteOne({ $or: [{ tokenHash: h }, { prevHash: h }] });
+  }
   res.clearCookie(COOKIE, clearOpts());
 }
 

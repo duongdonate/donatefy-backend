@@ -58,14 +58,13 @@ router.post("/register", checkRegister, async (req, res) => {
       password: hashedPassword,
       avatar: avatar || false,
     });
-    newUser.save();
 
     if (avatar) {
       const newAvatar = new Avatar({
         userId: newUser._id,
         username: newUser.username,
       });
-      newAvatar.save();
+      await newAvatar.save();
     }
 
     res
