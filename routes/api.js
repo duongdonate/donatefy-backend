@@ -268,6 +268,19 @@ const findOwned = (id, userId) => {
   return filter && CustomPlaylist.findOne(filter);
 };
 
+router.get("/playlists/:id", async (req, res) => {
+  try {
+    const playlist = await findOwned(req.params.id, req.userId);
+    if (!playlist) {
+      return res.status(404).json({ error: "Không tìm thấy playlist" });
+    }
+    res.json(withCover(playlist));
+  } catch (error) {
+    console.error("Lỗi khi lấy playlist:", error.message);
+    res.status(500).json({ error: "Lỗi khi lấy playlist" });
+  }
+});
+
 router.post("/playlists/:id/add-song", async (req, res) => {
   const { id } = req.params;
   const { videoIds, name, artist, thumbnail } = req.body;

@@ -543,6 +543,28 @@ paths:
           $ref: "#/components/responses/ServerError"
 
   /api/playlists/{id}:
+    get:
+      operationId: getPlaylist
+      tags: [Playlists]
+      summary: Lấy một playlist
+      description: Kèm `cover` (= `thumbnail`, ảnh bìa gán lúc tạo, cố định).
+      parameters:
+        - $ref: "#/components/parameters/PlaylistIdPath"
+      security:
+        - bearerAuth: []
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "200":
+          description: Playlist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaylistWithCover"
+        "404":
+          $ref: "#/components/responses/PlaylistNotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
     patch:
       operationId: updatePlaylist
       tags: [Playlists]
@@ -622,30 +644,6 @@ paths:
                 $ref: "#/components/schemas/Message"
               example:
                 message: Đã xóa playlist thành công
-        "404":
-          $ref: "#/components/responses/PlaylistNotFound"
-        "500":
-          $ref: "#/components/responses/ServerError"
-
-  /playlists/{id}:
-    get:
-      operationId: getPlaylist
-      tags: [Playlists]
-      summary: Lấy một playlist
-      description: Kèm `cover` (= `thumbnail`, ảnh bìa gán lúc tạo, cố định).
-      parameters:
-        - $ref: "#/components/parameters/PlaylistIdPath"
-      security:
-        - bearerAuth: []
-      responses:
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "200":
-          description: Playlist
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PlaylistWithCover"
         "404":
           $ref: "#/components/responses/PlaylistNotFound"
         "500":
