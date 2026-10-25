@@ -56,6 +56,21 @@ npm install -g nodemon
 nodemon index.js
 ```
 
+## Gán chủ cho playlist cũ
+
+Playlist tạo trước khi có đăng nhập chưa có `userId`. Gán chúng cho một tài khoản (dùng `MONGO_URI` trong `.env`):
+
+```bash
+node scripts/assign-playlists-owner.js <username> --dry-run   # chỉ đếm, không ghi
+node scripts/assign-playlists-owner.js <username>             # gán thật
+```
+
+Chạy lại nhiều lần vẫn an toàn (lần sau báo 0 playlist). Nên thử `--dry-run` trước, hoặc trỏ `MONGO_URI` sang bản sao của database.
+
+## Rủi ro đã biết: cookie refresh khi triển khai
+
+Khi frontend (Vercel) và backend nằm ở hai tên miền khác nhau, cookie `refresh_token` là cookie bên thứ ba. Safari và các trình duyệt chặn cookie bên thứ ba sẽ không gửi nó, nên người dùng phải đăng nhập lại mỗi giờ (khi access token hết hạn). Cách sửa về sau: dùng rewrite của Vercel chuyển tiếp `/api/*` sang backend để cookie thành cùng site.
+
 ## Các API endpoint
 
 **Lưu ý**: tất cả endpoints bắt đầu bằng `/api`

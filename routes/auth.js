@@ -1,14 +1,12 @@
 // routes/authRoutes.js
 const express = require("express");
 const router = express.Router();
-const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const User = require("../models/User");
 const Avatar = require("../models/Avatar");
 const checkRegister = require("../middleware/checkRegister");
 const checkAuth = require("../middleware/checkAuth");
-
-const secretKey = process.env.JWT_SECRET;
+const { issueSession, refreshSession, endSession } = require("../services/sessionService");
 
 router.get("/me", checkAuth, async (req, res) => {
   try {
@@ -44,10 +42,7 @@ router.post("/login", async (req, res) => {
         .json({ message: "Tên tài khoản hoặc mật khẩu không chính xác" });
     }
 
-    const token = jwt.sign({ id: userFound._id }, secretKey, {
-      expiresIn: "2h",
-    });
-    res.json({ access_token: token });
+    res.json(await issueSession(res, String(userFound._id)));
   } catch (error) {
     console.error("Login error:", error);
     res.status(500).json({ message: "Lỗi server" });
@@ -63,24 +58,45 @@ router.post("/register", checkRegister, async (req, res) => {
       password: hashedPassword,
       avatar: avatar || false,
     });
-    newUser.save();
 
     if (avatar) {
       const newAvatar = new Avatar({
         userId: newUser._id,
         username: newUser.username,
       });
-      newAvatar.save();
+      await newAvatar.save();
     }
 
-    const token = jwt.sign({ id: newUser._id }, secretKey, {
-      expiresIn: "1h",
-    });
     res
       .status(201)
-      .json({ message: "Đăng ký thành công", access_token: token });
+      .json({ message: "Đăng ký thành công", ...(await issueSession(res, String(newUser._id))) });
   } catch (error) {
     console.error("Register error:", error);
+    res.status(500).json({ message: "Lỗi server" });
+  }
+});
+
+router.post("/refresh", async (req, res) => {
+  try {
+    const session = await refreshSession(req, res);
+    if (!session) {
+      return res
+        .status(401)
+        .json({ message: "Phiên đăng nhập đã hết, vui lòng đăng nhập lại" });
+    }
+    res.json(session);
+  } catch (error) {
+    console.error("Refresh error:", error);
+    res.status(500).json({ message: "Lỗi server" });
+  }
+});
+
+router.post("/logout", async (req, res) => {
+  try {
+    await endSession(req, res);
+    res.sendStatus(204);
+  } catch (error) {
+    console.error("Logout error:", error);
     res.status(500).json({ message: "Lỗi server" });
   }
 });

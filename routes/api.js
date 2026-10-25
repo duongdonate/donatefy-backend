@@ -9,8 +9,8 @@ const songService = require("../services/songService");
 const CustomSong = require("../models/CustomSong");
 const getRandomPlaylistCover = require("../utils/randomPlaylistCover");
 const parseToSeconds = require("../utils/parseToSeconds");
-const mongoose = require("mongoose");
 const { normalizeMeta } = require("../utils/playlistSongs");
+const { ownedFilter } = require("../utils/session");
 
 const Res = require("../utils/Res");
 
@@ -25,6 +25,7 @@ const cache = new NodeCache({ stdTTL: 600, checkperiod: 120 }); // checkperiod: 
 // Cấu hình retry cho axios để xử lý rate limit
 
 const checkApiKey = require("../middleware/checkApiKey");
+const checkAuth = require("../middleware/checkAuth");
 
 // Endpoint để tìm kiếm video trên YouTube
 router.get("/search", checkApiKey, async (req, res) => {
@@ -74,6 +75,68 @@ router.get("/search", checkApiKey, async (req, res) => {
     res.status(500).json({ error: "Lỗi server", details: error.message });
   }
 });
+
+// Endpoint để lấy thông tin video theo ID
+router.get("/video/:id", checkApiKey, async (req, res) => {
+  const { id } = req.params;
+
+  if (!id) {
+    return res.status(400).json({ error: "videoId là bắt buộc" });
+  }
+
+  const cacheKey = `video_${id}`;
+  const cacheData = cache.get(cacheKey);
+
+  // Nếu có dữ liệu trong cache, trả về ngay lập tức
+  if (cacheData) {
+    console.log("Trả về dữ liệu từ cache"); // Log trả về từ cache
+    return res.json(cacheData);
+  }
+
+  try {
+    // Log request
+    const response = await axios.get(
+      "https://www.googleapis.com/youtube/v3/videos",
+      {
+        params: {
+          part: "snippet",
+          id,
+          key: process.env.YOUTUBE_API_KEY,
+        },
+      }
+    );
+
+    if (!response.data.items || response.data.items.length === 0) {
+      return res.status(404).json({ error: "Không tìm thấy video" });
+    }
+    const item = response.data.items[0];
+    const video = {
+      id: item.id,
+      title: item.snippet.title,
+      channel: item.snippet.channelTitle,
+      thumbnail: item.snippet.thumbnails.default.url,
+    };
+
+    // Lưu vào cache
+    cache.set(cacheKey, video); // Lưu dữ liệu vào cache với key tương ứng
+    console.log(`Lưu dữ liệu vào cache: ${id}`); // Log lưu thành công
+    res.json(video);
+  } catch (error) {
+    if (error.response) {
+      console.error("Lỗi từ YouTube API:", error.response.data);
+      res.status(error.response.status).json({
+        error: "Lỗi từ YouTube API",
+        details: error.response.data,
+      });
+    } else {
+      console.error("Lỗi khác:", error.message);
+      res.status(500).json({ error: "Lỗi server", details: error.message });
+    }
+  }
+});
+
+// Mọi route từ đây trở xuống cần đăng nhập (req.userId)
+router.use(checkAuth);
 
 // Endpoint để lưu lịch sử tìm kiếm
 // Trong router.js
@@ -143,65 +206,6 @@ router.delete("/history/:query", async (req, res) => {
   }
 });
 
-// Endpoint để lấy thông tin video theo ID
-router.get("/video/:id", checkApiKey, async (req, res) => {
-  const { id } = req.params;
-
-  if (!id) {
-    return res.status(400).json({ error: "videoId là bắt buộc" });
-  }
-
-  const cacheKey = `video_${id}`;
-  const cacheData = cache.get(cacheKey);
-
-  // Nếu có dữ liệu trong cache, trả về ngay lập tức
-  if (cacheData) {
-    console.log("Trả về dữ liệu từ cache"); // Log trả về từ cache
-    return res.json(cacheData);
-  }
-
-  try {
-    // Log request
-    const response = await axios.get(
-      "https://www.googleapis.com/youtube/v3/videos",
-      {
-        params: {
-          part: "snippet",
-          id,
-          key: process.env.YOUTUBE_API_KEY,
-        },
-      }
-    );
-
-    if (!response.data.items || response.data.items.length === 0) {
-      return res.status(404).json({ error: "Không tìm thấy video" });
-    }
-    const item = response.data.items[0];
-    const video = {
-      id: item.id,
-      title: item.snippet.title,
-      channel: item.snippet.channelTitle,
-      thumbnail: item.snippet.thumbnails.default.url,
-    };
-
-    // Lưu vào cache
-    cache.set(cacheKey, video); // Lưu dữ liệu vào cache với key tương ứng
-    console.log(`Lưu dữ liệu vào cache: ${id}`); // Log lưu thành công
-    res.json(video);
-  } catch (error) {
-    if (error.response) {
-      console.error("Lỗi từ YouTube API:", error.response.data);
-      res.status(error.response.status).json({
-        error: "Lỗi từ YouTube API",
-        details: error.response.data,
-      });
-    } else {
-      console.error("Lỗi khác:", error.message);
-      res.status(500).json({ error: "Lỗi server", details: error.message });
-    }
-  }
-});
-
 // Tạo một playlist mới
 router.post("/playlists", async (req, res) => {
   const { name, videos } = req.body;
@@ -215,6 +219,7 @@ router.post("/playlists", async (req, res) => {
       name,
       videos: videos || [],
       thumbnail: getRandomPlaylistCover(),
+      userId: req.userId,
     });
     await playlist.save();
     console.log(`Đã tạo playlist: ${name}`); // Log tạo thành công
@@ -227,16 +232,16 @@ router.post("/playlists", async (req, res) => {
   }
 });
 
-// Link chia sẻ trỏ về trang /playlist/:id của frontend (lấy địa chỉ đầu tiên nếu FRONTEND_URL là danh sách)
+// Link chia sẻ trỏ về trang /playlists/:id của frontend (lấy địa chỉ đầu tiên nếu FRONTEND_URL là danh sách)
 const FRONTEND = (process.env.FRONTEND_URL || "http://localhost:5173").split(",")[0].trim().replace(/\/$/, "");
 
 // Lấy tất cả playlists
 router.get("/playlists", async (req, res) => {
   try {
-    const playlists = await CustomPlaylist.find().sort({ createdAt: -1 });
+    const playlists = await CustomPlaylist.find({ userId: req.userId }).sort({ createdAt: -1 });
     const playlistsWithShareUrl = playlists.map((playlist) => ({
       ...playlist._doc,
-      shareUrl: `${FRONTEND}/playlist/${playlist._id}`,
+      shareUrl: `${FRONTEND}/playlists/${playlist._id}`,
       cover: playlist.thumbnail, // bìa gán lúc tạo, cố định
     }));
     Res.success(res, playlistsWithShareUrl, "Lấy playlists thành công");
@@ -250,7 +255,10 @@ router.get("/playlists", async (req, res) => {
 
 const VIDEO_ID = /^[\w-]{11}$/;
 const withCover = (playlist) => ({ ...playlist.toJSON(), cover: playlist.thumbnail });
-const findPlaylist = (id) => (mongoose.isValidObjectId(id) ? CustomPlaylist.findById(id) : null);
+const findOwned = (id, userId) => {
+  const filter = ownedFilter(id, userId);
+  return filter && CustomPlaylist.findOne(filter);
+};
 
 router.post("/playlist/:id/add-song", async (req, res) => {
   const { id } = req.params;
@@ -268,7 +276,7 @@ router.post("/playlist/:id/add-song", async (req, res) => {
   }
 
   try {
-    const playlist = await findPlaylist(id);
+    const playlist = await findOwned(id, req.userId);
     if (!playlist) {
       return res.status(404).json({ error: "Không tìm thấy playlist" });
     }
@@ -330,7 +338,7 @@ router.patch("/playlists/:id", async (req, res) => {
   }
 
   try {
-    const playlist = await findPlaylist(req.params.id);
+    const playlist = await findOwned(req.params.id, req.userId);
     if (!playlist) {
       return res.status(404).json({ error: "Không tìm thấy playlist" });
     }
@@ -360,7 +368,7 @@ router.post("/playlists/:id/remove-song", async (req, res) => {
   }
 
   try {
-    const playlist = await CustomPlaylist.findById(id);
+    const playlist = await findOwned(id, req.userId);
     if (!playlist) {
       return res.status(404).json({ error: "Không tìm thấy playlist" });
     }
@@ -449,7 +457,8 @@ router.delete("/playlists/:id", async (req, res) => {
   const { id } = req.params;
 
   try {
-    const playlist = await CustomPlaylist.findByIdAndDelete(id);
+    const filter = ownedFilter(id, req.userId);
+    const playlist = filter && (await CustomPlaylist.findOneAndDelete(filter));
     if (!playlist) {
       return res.status(404).json({ error: "Không tìm thấy playlist" });
     }
