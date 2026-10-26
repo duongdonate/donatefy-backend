@@ -53,7 +53,7 @@ router.post("/login", async (req, res) => {
 router.post("/google", async (req, res) => {
   let payload;
   try {
-    payload = await verifyGoogleCredential(req.body?.credential);
+    payload = await verifyGoogleCredential(req.body?.access_token);
   } catch {
     return res.status(401).json({ message: "Đăng nhập Google thất bại" });
   }

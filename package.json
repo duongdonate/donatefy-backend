@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "nodemon --inspect index.js",
-    "test": "node --test utils",
+    "test": "node --test utils services",
     "kill8404": "npx kill-port 8404"
   },
   "keywords": [],
@@ -21,7 +21,6 @@
     "ejs": "^3.1.10",
     "express": "^4.21.2",
     "express-list-endpoints": "^7.1.1",
-    "google-auth-library": "^10.9.1",
     "jsonwebtoken": "^9.0.2",
     "mongod": "^2.0.0",
     "mongodb": "^6.13.1",

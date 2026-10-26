@@ -168,7 +168,7 @@ paths:
       tags: [Auth]
       summary: Đăng nhập bằng Google
       description: |
-        Nhận ID token (`credential`) từ Google Identity Services, kiểm bằng `GOOGLE_CLIENT_ID`.
+        Nhận access token từ popup OAuth của Google, hỏi Google `tokeninfo` để chắc token cấp cho `GOOGLE_CLIENT_ID`, rồi lấy hồ sơ từ `userinfo`.
         Tìm user theo `googleId` (không ghép theo email/username), chưa có thì tạo mới với `username` tự sinh.
         Mỗi lần đăng nhập cập nhật `displayName` và `avatar` theo Google. Trả JWT và đặt cookie `refresh_token` như `/api/auth/login`.
       requestBody:
@@ -177,11 +177,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [credential]
+              required: [access_token]
               properties:
-                credential:
+                access_token:
                   type: string
-                  description: ID token do Google cấp
+                  description: Access token Google (scope openid email profile)
       responses:
         "200":
           description: Đăng nhập thành công, trả về JWT (hạn 1 giờ)
@@ -194,7 +194,7 @@ paths:
                     type: string
                     example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
         "401":
-          description: Thiếu hoặc sai credential
+          description: Thiếu hoặc sai access token
           content:
             application/json:
               schema:

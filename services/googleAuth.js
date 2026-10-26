@@ -1,17 +1,20 @@
-const { OAuth2Client } = require("google-auth-library");
 const User = require("../models/User");
 const { makeUsername } = require("../utils/googleUser");
 
-const client = new OAuth2Client();
-
-async function verifyGoogleCredential(credential) {
-  // thiếu audience thì thư viện bỏ qua kiểm tra: phải chặn
-  if (!process.env.GOOGLE_CLIENT_ID) throw new Error("Thiếu GOOGLE_CLIENT_ID");
-  const ticket = await client.verifyIdToken({
-    idToken: credential,
-    audience: process.env.GOOGLE_CLIENT_ID,
+// Access token từ popup OAuth (useGoogleLogin): hỏi Google token cấp cho app nào, rồi lấy hồ sơ
+async function verifyGoogleCredential(accessToken, { clientId = process.env.GOOGLE_CLIENT_ID, fetch = globalThis.fetch } = {}) {
+  if (!clientId) throw new Error("Thiếu GOOGLE_CLIENT_ID");
+  if (typeof accessToken !== "string" || !accessToken) throw new Error("Thiếu access token");
+  const info = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(accessToken)}`);
+  const token = info.ok ? await info.json() : {};
+  // token cấp cho app khác thì không nhận, kẻo app đó dùng lại token của người dùng để vào đây
+  if (token.aud !== clientId) throw new Error("Token không dành cho app này");
+  const me = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
-  const { sub, email, name, picture } = ticket.getPayload();
+  if (!me.ok) throw new Error("Không lấy được hồ sơ Google");
+  const { sub, email, name, picture } = await me.json();
+  if (!sub || sub !== token.sub) throw new Error("Hồ sơ Google không khớp token");
   return { sub, email, name, picture };
 }
 
