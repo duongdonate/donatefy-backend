@@ -6,9 +6,8 @@ const SearchHistory = require("../models/SearchHistory");
 const CustomPlaylist = require("../models/CustomPlaylist");
 const apiYoutubeService = require("../services/apiYoutubeService");
 const songService = require("../services/songService");
-const CustomSong = require("../models/CustomSong");
 const getRandomPlaylistCover = require("../utils/randomPlaylistCover");
-const parseToSeconds = require("../utils/parseToSeconds");
+const { parsePlaylistUrl } = require("../utils/youtubeUrl");
 const { normalizeMeta } = require("../utils/playlistSongs");
 const { ownedFilter } = require("../utils/session");
 
@@ -268,6 +267,67 @@ const findOwned = (id, userId) => {
   return filter && CustomPlaylist.findOne(filter);
 };
 
+// Nhập một playlist YouTube công khai thành playlist mới của người dùng
+router.post("/playlists/import", async (req, res) => {
+  const parsed = parsePlaylistUrl(req.body?.url);
+  if (!parsed.ok) {
+    return res
+      .status(400)
+      .json({ error: parsed.error, ...(parsed.videoId && { videoId: parsed.videoId }) });
+  }
+  const { playlistId } = parsed;
+
+  try {
+    const dup = await CustomPlaylist.findOne({
+      userId: req.userId,
+      "source.playlistId": playlistId,
+    });
+    if (dup) {
+      return res
+        .status(409)
+        .json({ error: "Bạn đã nhập playlist này rồi", playlistId: dup._id });
+    }
+
+    const [{ videoIds, truncated }, title] = await Promise.all([
+      apiYoutubeService.fetchPlaylistVideoIds(playlistId),
+      apiYoutubeService.fetchPlaylistTitle(playlistId),
+    ]);
+    const { available } = await songService.ensureSongs(videoIds);
+    if (!available.length) {
+      return res
+        .status(422)
+        .json({ error: "Playlist không có bài nào dùng được" });
+    }
+
+    const name =
+      (typeof req.body.name === "string" && req.body.name.trim()) ||
+      title?.trim() ||
+      "Playlist YouTube";
+    const now = new Date();
+    const playlist = await CustomPlaylist.create({
+      name: name.slice(0, 60), // khớp giới hạn 60 ký tự của PATCH
+      videos: available,
+      thumbnail: getRandomPlaylistCover(),
+      userId: req.userId,
+      source: { provider: "youtube", playlistId, importedAt: now, lastSyncedAt: now },
+    });
+    console.log(`Đã nhập playlist ${playlistId}: ${available.length} bài`);
+    res.status(201).json({
+      playlist: withCover(playlist),
+      added: available.length,
+      skipped: videoIds.length - available.length,
+      truncated,
+    });
+  } catch (error) {
+    console.error("Lỗi khi nhập playlist:", error.message);
+    const known = apiYoutubeService.youtubeErrorResponse(error);
+    if (known) return res.status(known.status).json({ error: known.error });
+    res
+      .status(500)
+      .json({ error: "Lỗi khi nhập playlist", details: error.message });
+  }
+});
+
 router.get("/playlists/:id", async (req, res) => {
   try {
     const playlist = await findOwned(req.params.id, req.userId);
@@ -309,32 +369,8 @@ router.post("/playlists/:id/add-song", async (req, res) => {
       (v) => !playlist.videos.includes(v),
     );
 
-    // Chỉ lấy từ YouTube những bài chưa có trong CustomSong, không ghi đè bài đã có
-    const existing = (await CustomSong.find({ id: { $in: newIds } })).map(
-      (s) => s.id,
-    );
-    const missing = newIds.filter((v) => !existing.includes(v));
-    let fetched = [];
-    if (missing.length) {
-      const data = await apiYoutubeService.fetchYouTubeVideos(missing);
-      fetched = data.items.map((item) => ({
-        id: item.id,
-        name: item.snippet.title,
-        artist: item.snippet.channelTitle,
-        thumbnail: item.snippet.thumbnails.high.url,
-        createdAt: item.snippet.publishedAt,
-        duration: parseToSeconds(item.contentDetails.duration),
-      }));
-      await CustomSong.insertMany(fetched, { ordered: false }).catch((e) => {
-        if (e.code !== 11000) throw e; // bài vừa được tạo song song thì bỏ qua
-      });
-    }
-
     // Video không có trên YouTube (link hỏng / đã xoá) thì không thêm
-    const fetchedIds = fetched.map((v) => v.id);
-    const toAdd = newIds.filter(
-      (v) => existing.includes(v) || fetchedIds.includes(v),
-    );
+    const { available: toAdd } = await songService.ensureSongs(newIds);
     playlist.videos.push(...toAdd);
     if (toAdd.length === 1 && Object.keys(meta).length)
       playlist.meta.set(toAdd[0], meta);

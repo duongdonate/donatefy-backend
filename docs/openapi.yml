@@ -542,6 +542,113 @@ paths:
         "500":
           $ref: "#/components/responses/ServerError"
 
+  /api/playlists/import:
+    post:
+      operationId: importYoutubePlaylist
+      tags: [Playlists]
+      summary: Nhập một playlist YouTube công khai thành playlist mới
+      description: |
+        Đọc danh sách video của playlist YouTube (tối đa 500 bài, giữ thứ tự gốc), lưu bài chưa có
+        vào CustomSong (bài đã có không bị ghi đè) rồi tạo playlist mới của người đang đăng nhập,
+        có trường `source` ghi nguồn. Video YouTube không trả về (đã xoá, riêng tư) bị bỏ qua và
+        tính vào `skipped`.
+
+        Hỗ trợ playlist Công khai và Không công khai (`list=PL...`). Không hỗ trợ: Mix tự động
+        (`list=RD...`), Đã thích (`LL`), Xem sau (`WL`), playlist Riêng tư (YouTube trả 404).
+
+        Tốn khoảng `2 × ceil(số bài / 50) + 1` đơn vị quota YouTube (200 bài ≈ 9).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  description: Link YouTube có tham số `list=` (youtube.com, m.youtube.com, music.youtube.com)
+                  example: https://www.youtube.com/playlist?list=PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG
+                name:
+                  type: string
+                  description: Tên playlist; bỏ trống thì dùng tên playlist gốc. Cắt còn 60 ký tự
+                  example: Nhạc chill nhập từ YouTube
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Playlist vừa tạo và thống kê
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  playlist:
+                    $ref: "#/components/schemas/PlaylistWithCover"
+                  added:
+                    type: integer
+                    description: Số bài đưa vào playlist
+                    example: 58
+                  skipped:
+                    type: integer
+                    description: Số video YouTube không trả về (đã xoá, riêng tư)
+                    example: 2
+                  truncated:
+                    type: boolean
+                    description: "`true` khi playlist gốc dài hơn 500 bài và đã bị cắt"
+                    example: false
+        "400":
+          description: Link sai, không phải YouTube, thiếu `list=`, hoặc là Mix / Đã thích / Xem sau
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  videoId:
+                    type: string
+                    description: Chỉ có với link Mix kèm `v=`; bài đang phát, để gợi ý thêm riêng bài này
+              example:
+                error: "Đây là Mix tự động của YouTube, không nhập được. Mẹo: thêm các bài của Mix vào một playlist mới (Công khai hoặc Không công khai) rồi dán link playlist đó"
+                videoId: qBsiWmEdj0c
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Người dùng đã nhập playlist nguồn này rồi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  playlistId:
+                    type: string
+                    description: Id playlist đã nhập trước đó
+              example:
+                error: Bạn đã nhập playlist này rồi
+                playlistId: 65f123abc123def456789012
+        "422":
+          description: Playlist riêng tư hoặc không tồn tại, hoặc không còn bài nào dùng được
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: Playlist không công khai hoặc không tồn tại
+        "503":
+          description: Hết hạn mức (quota) YouTube trong ngày
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: Đã hết hạn mức YouTube hôm nay, hãy thử lại sau
+        "500":
+          $ref: "#/components/responses/ServerError"
+
   /api/playlists/{id}:
     get:
       operationId: getPlaylist
@@ -1227,6 +1334,22 @@ components:
         userId:
           type: string
           nullable: true
+        source:
+          type: object
+          description: Chỉ có khi playlist được nhập từ YouTube
+          properties:
+            provider:
+              type: string
+              enum: [youtube]
+            playlistId:
+              type: string
+              example: PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG
+            importedAt:
+              type: string
+              format: date-time
+            lastSyncedAt:
+              type: string
+              format: date-time
 
     SongMetaInput:
       type: object
