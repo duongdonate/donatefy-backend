@@ -15,7 +15,13 @@ const customPlaylistSchema = new mongoose.Schema({
   // Nguồn khi playlist được nhập từ YouTube; playlist tạo tay không có trường này
   source: {
     type: new mongoose.Schema(
-      { provider: String, playlistId: String, importedAt: Date, lastSyncedAt: Date },
+      {
+        provider: String,
+        playlistId: String,
+        importedAt: Date,
+        lastSyncedAt: Date,
+        removedIds: [String], // bài người dùng đã xoá: sync không thêm lại
+      },
       { _id: false },
     ),
     default: undefined,

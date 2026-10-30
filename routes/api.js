@@ -8,7 +8,7 @@ const apiYoutubeService = require("../services/apiYoutubeService");
 const songService = require("../services/songService");
 const getRandomPlaylistCover = require("../utils/randomPlaylistCover");
 const { parsePlaylistUrl } = require("../utils/youtubeUrl");
-const { normalizeMeta } = require("../utils/playlistSongs");
+const { normalizeMeta, newFromSource } = require("../utils/playlistSongs");
 const { ownedFilter } = require("../utils/session");
 
 const Res = require("../utils/Res");
@@ -328,6 +328,40 @@ router.post("/playlists/import", async (req, res) => {
   }
 });
 
+// Thêm vào cuối các bài mới của playlist YouTube nguồn; không xoá, không đổi thứ tự, không đụng meta
+router.post("/playlists/:id/sync", async (req, res) => {
+  try {
+    const playlist = await findOwned(req.params.id, req.userId);
+    if (!playlist) {
+      return res.status(404).json({ error: "Không tìm thấy playlist" });
+    }
+    if (!playlist.source?.playlistId) {
+      return res
+        .status(400)
+        .json({ error: "Playlist này không được nhập từ YouTube" });
+    }
+
+    const { videoIds } = await apiYoutubeService.fetchPlaylistVideoIds(
+      playlist.source.playlistId,
+    );
+    const { available } = await songService.ensureSongs(
+      newFromSource(videoIds, playlist.videos, playlist.source.removedIds),
+    );
+    playlist.videos.push(...available);
+    playlist.source.lastSyncedAt = new Date();
+    await playlist.save();
+    console.log(`Đã sync playlist ${playlist._id}: thêm ${available.length} bài`);
+    res.json({ playlist: withCover(playlist), added: available.length });
+  } catch (error) {
+    console.error("Lỗi khi sync playlist:", error.message);
+    const known = apiYoutubeService.youtubeErrorResponse(error);
+    if (known) return res.status(known.status).json({ error: known.error });
+    res
+      .status(500)
+      .json({ error: "Lỗi khi sync playlist", details: error.message });
+  }
+});
+
 router.get("/playlists/:id", async (req, res) => {
   try {
     const playlist = await findOwned(req.params.id, req.userId);
@@ -441,6 +475,12 @@ router.post("/playlists/:id/remove-song", async (req, res) => {
       return res.status(404).json({ error: "Không tìm thấy playlist" });
     }
 
+    // Playlist nhập từ YouTube: nhớ bài đã xoá để sync không thêm lại
+    if (playlist.source && playlist.videos.includes(videoId)) {
+      playlist.source.removedIds = [
+        ...new Set([...(playlist.source.removedIds ?? []), videoId]),
+      ];
+    }
     playlist.videos = playlist.videos.filter((vid) => vid !== videoId);
     playlist.meta.delete(videoId);
     await playlist.save();

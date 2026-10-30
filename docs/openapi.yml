@@ -649,6 +649,62 @@ paths:
         "500":
           $ref: "#/components/responses/ServerError"
 
+  /api/playlists/{id}/sync:
+    post:
+      operationId: syncImportedPlaylist
+      tags: [Playlists]
+      summary: Thêm bài mới từ playlist YouTube nguồn
+      description: |
+        Chỉ dùng cho playlist có `source` (đã nhập qua `/api/playlists/import`). Đọc lại playlist
+        YouTube nguồn (tối đa 500 bài đầu) và thêm vào cuối những bài chưa có. Không xoá bài, không
+        đổi thứ tự bài cũ, không đụng tên/bìa đã sửa (`meta`). Bài người dùng đã xoá khỏi playlist
+        (`source.removedIds`) không bị thêm lại. Cập nhật `source.lastSyncedAt`.
+      parameters:
+        - $ref: "#/components/parameters/PlaylistIdPath"
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Playlist sau khi sync và số bài mới được thêm
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  playlist:
+                    $ref: "#/components/schemas/PlaylistWithCover"
+                  added:
+                    type: integer
+                    example: 3
+        "400":
+          description: Playlist không được nhập từ YouTube (không có `source`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: Playlist này không được nhập từ YouTube
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/PlaylistNotFound"
+        "422":
+          description: Playlist nguồn đã chuyển sang riêng tư hoặc bị xoá
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: Playlist không công khai hoặc không tồn tại
+        "503":
+          description: Hết hạn mức (quota) YouTube trong ngày
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
   /api/playlists/{id}:
     get:
       operationId: getPlaylist
@@ -1350,6 +1406,11 @@ components:
             lastSyncedAt:
               type: string
               format: date-time
+            removedIds:
+              type: array
+              description: videoId người dùng đã xoá khỏi playlist; sync không thêm lại
+              items:
+                type: string
 
     SongMetaInput:
       type: object
