@@ -25,3 +25,10 @@ test("normalizeMeta", () => {
   assert.deepEqual(normalizeMeta(id, { thumbnail: "https://evil.com/a.jpg" }), { ok: false, error: "Ảnh bìa không hợp lệ" });
   assert.deepEqual(normalizeMeta(id, { thumbnail: "https://i.ytimg.com/vi/AAAAAAAAAAA/hq1.jpg" }), { ok: false, error: "Ảnh bìa không hợp lệ" });
 });
+
+test("newFromSource: chỉ bài mới theo thứ tự nguồn, bỏ bài đã có và bài người dùng đã xoá", () => {
+  const { newFromSource } = require("./playlistSongs");
+  assert.deepEqual(newFromSource(["a", "b", "c", "d", "e"], ["c", "a", "x"], ["d"]), ["b", "e"]);
+  assert.deepEqual(newFromSource(["a"], ["a"]), []);
+  assert.deepEqual(newFromSource(["b", "a"], [], undefined), ["b", "a"]);
+});

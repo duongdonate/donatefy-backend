@@ -12,6 +12,20 @@ const customPlaylistSchema = new mongoose.Schema({
   thumbnail: { type: String }, // Ảnh đại diện
   createdAt: { type: Date, default: Date.now }, // Thời gian tạo
   userId: { type: String, ref: "User" }, // ID người dùng tạo danh sách phát
+  // Nguồn khi playlist được nhập từ YouTube; playlist tạo tay không có trường này
+  source: {
+    type: new mongoose.Schema(
+      {
+        provider: String,
+        playlistId: String,
+        importedAt: Date,
+        lastSyncedAt: Date,
+        removedIds: [String], // bài người dùng đã xoá: sync không thêm lại
+      },
+      { _id: false },
+    ),
+    default: undefined,
+  },
 });
 
 module.exports = mongoose.model("CustomPlaylist", customPlaylistSchema);

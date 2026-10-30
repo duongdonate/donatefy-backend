@@ -29,4 +29,10 @@ const normalizeMeta = (videoId, input = {}) => {
   return { ok: true, meta };
 };
 
-module.exports = { orderAndMerge, normalizeMeta };
+// Bài mới của playlist nguồn (giữ thứ tự nguồn): chưa có trong playlist và không phải bài người dùng đã xoá
+const newFromSource = (sourceIds, videos, removedIds = []) => {
+  const skip = new Set([...videos, ...removedIds]);
+  return sourceIds.filter((id) => !skip.has(id));
+};
+
+module.exports = { orderAndMerge, normalizeMeta, newFromSource };
